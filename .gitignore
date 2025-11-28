@@ -31,3 +31,6 @@ htmlcov/
 ### OS junk
 .DS_Store
 Thumbs.db
+
+### Project artifacts
+doc/
