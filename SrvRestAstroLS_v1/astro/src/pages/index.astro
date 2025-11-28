@@ -1,0 +1,33 @@
+---
+import AguiPozoFlowV01 from "../components/AguiPozoFlowV01.svelte";
+import HelloPozo from "../components/HelloPozo.svelte";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { DEFAULT_LOCALE, STRINGS } from "../config/strings";
+
+const locale = DEFAULT_LOCALE;
+const strings = STRINGS[locale];
+const branding = {
+  displayName: "Estudio Demo",
+  logoUrl: "/logo-placeholder.svg",
+  primaryColor: "#0050E6",
+  secondaryColor: "#FFD700",
+  accentColor: "#0038B8",
+};
+---
+
+<BaseLayout brand={branding}>
+  <section class="space-y-2 mb-6">
+    <h1 class="text-3xl font-bold text-brand-primary">{strings.appTitle}</h1>
+    <p class="text-neutral-600">{strings.appSubtitle}</p>
+  </section>
+
+  <section class="space-y-3 mb-8">
+    <h2 class="text-xl font-semibold">{strings.healthStatusLabel}</h2>
+    <HelloPozo client:load />
+  </section>
+
+  <section class="space-y-3">
+    <h2 class="text-xl font-semibold">{strings.aguiFlowTitle}</h2>
+    <AguiPozoFlowV01 client:load />
+  </section>
+</BaseLayout>

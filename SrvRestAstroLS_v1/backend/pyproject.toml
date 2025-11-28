@@ -1,0 +1,24 @@
+[project]
+name = "pozo360-backend"
+version = "0.1.0"
+description = "Backend service for Pozo360 built with Litestar."
+requires-python = ">=3.12"
+dependencies = [
+    "litestar",
+    "pydantic",
+    "jsonschema",
+    "httpx",
+    "pytest",
+    "uvicorn",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["modules", "routes", "models", "services", "middleware", "db"]
+include = ["globalVar.py", "ls_iMotorSoft_Srv01.py"]

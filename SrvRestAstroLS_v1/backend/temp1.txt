@@ -1,0 +1,83 @@
+BSD
+source .venv/bin/activate
+
+******* Grupos
+PILAGA No reflejado en Bco
+Banco No reflejado en PILAGA
+Conciliados 1 a 1
+Agrupados (<= 1)
+Sugeridos
+*************
+Por favor revisas los algoritmos, estos son todos los archivos que tenemos, pero ningun caso esta dando sugeridos, porque
+
+directorio
+/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/SpendIQ/Doc/FCE/Conciliacion
+
+Extractos
+09 - EXTRACTO.xlsx (ciudad)
+EXTRACTO PATAGONIA AGOST-SEPT.xlsx
+EXTRACTO SANTANDER AGOST-SEPT.xlsx
+Extracto Ciudad julio.xlsx
+
+Contable
+09 - PILAGA.xlsx (ciudad)
+PILAGA PATAGONIA AGOST-SEPT.xlsx
+PILAGA SANTANDER AGOST -SEPT.xlsx
+PILAGA CIUDAD JULIO.xlsx
+
+**************
+Estos son nuestra areas
+PILAGA No reflejado en Bco
+Banco No reflejado en PILAGA
+Conciliados 1 a 1
+Agrupados (<= 1)
+Sugeridos
+
+que no se lance ningun proceso en forma automatica, lo vamos hacer explicito.
+
+Empecemos por el primero
+PILAGA No reflejado en Bco
+en la misma line despues de  de op y total a la derecha poner un pequeño boton que diga calcular
+
+primero decime que entendiste
+*********************
+Necesito que compares 2 archivos de extractos bancarios. Para decidir que logica de codigo usamos, no hagas nada solo pruebas que necesites hacer pero que no toquen ningun codigo existente
+
+archivo 1 es usado en la logica del codigo
+/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/SpendIQ/Doc/FCE/Conciliacion/09 - EXTRACTO.xlsx
+
+archivo 2 es el nuevo que no coincide
+/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/SpendIQ/Doc/FCE/10- Octubre Extracto.xlsx
+
+
+*********************
+Necesito que compares 2 archivos contables. Para decidir que logica de codigo usamos, no hagas nada solo pruebas que necesites hacer pero que no toquen ningun codigo existente
+
+archivo 1 es usado en la logica del codigo
+/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/SpendIQ/Doc/FCE/Conciliacion/09 - PILAGA.xlsx
+
+archivo 2 es el nuevo que no coincide
+/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/SpendIQ/Doc/FCE/10- Octubre Pilaga.xlsx
+
+**********************************
+te paso los archivos reales
+extracto
+/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/SpendIQ/Doc/FCE/10- Octubre Extracto.xlsx
+
+contable
+/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/SpendIQ/Doc/FCE/10- Octubre Pilaga.xlsx
+
+la descomposicion dio todo 0
+
+Descomposición de movimientos
+
+Estas cuatro categorías son disjuntas y suman el resultado del período de cada lado.
+Categoría	Banco	PILAGA
+Conciliados 1→1	0 op · $0,00	0 op · $0,00
+Agrupados (≤ $1)	0 op · $0,00	0 op · $0,00
+Sugeridos (>$1 y ≤ $5)	0 op · $0,00	0 op · $0,00
+No reflejado	Banco no reflejado en PILAGA: 308 op · $175.970.085,39	PILAGA no reflejado en Banco: 34 op · $-2.395.959.004,62
+
+
+
+

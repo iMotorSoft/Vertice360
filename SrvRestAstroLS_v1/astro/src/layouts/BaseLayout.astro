@@ -1,0 +1,37 @@
+---
+import "../styles/base.css";
+
+const brand = Astro.props.brand ?? {
+  displayName: "Estudio Demo",
+  logoUrl: "/logo-placeholder.svg",
+  primaryColor: "#0050E6",
+  secondaryColor: "#FFD700",
+  accentColor: "#0038B8",
+};
+---
+
+<!doctype html>
+<html lang="es" data-theme="pozo360">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pozo360</title>
+  </head>
+  <body
+    style={`--brand-primary:${brand.primaryColor};--brand-secondary:${brand.secondaryColor};--brand-accent:${brand.accentColor};`}
+    class="bg-base-100 text-base-content min-h-screen"
+  >
+    <header class="border-b border-neutral/10 bg-white/90 backdrop-blur">
+      <div class="container mx-auto px-4 py-4 flex items-center gap-3">
+        <img src={brand.logoUrl || "/logo-placeholder.svg"} alt="Logo" class="h-10 w-10 rounded" loading="lazy" />
+        <div class="flex flex-col">
+          <span class="font-semibold text-lg">{brand.displayName}</span>
+          <span class="text-sm text-neutral-500">Pozo360</span>
+        </div>
+      </div>
+    </header>
+    <main class="container mx-auto px-4 py-8">
+      <slot />
+    </main>
+  </body>
+</html>

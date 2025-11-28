@@ -1,0 +1,33 @@
+### Node / frontend
+node_modules/
+.pnpm-store/
+dist/
+.next/
+.astro/
+out/
+.cache/
+coverage/
+*.tsbuildinfo
+*.log
+
+### Editors
+.vscode/
+.idea/
+
+### Python / backend
+__pycache__/
+*.py[cod]
+*.pyd
+.venv/
+venv/
+.env
+.env.*
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+### OS junk
+.DS_Store
+Thumbs.db
