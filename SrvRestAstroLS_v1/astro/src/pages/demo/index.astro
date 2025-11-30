@@ -1,0 +1,33 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import CodexDemoDashboard from "../../components/demo/codex/CodexDemoDashboard.svelte";
+import CodexDemoLeadsFlow from "../../components/demo/codex/CodexDemoLeadsFlow.svelte";
+import CodexDemoChat from "../../components/demo/codex/CodexDemoChat.svelte";
+
+const branding = {
+  displayName: "Pozo360 Demo",
+  logoUrl: "/logo-placeholder.svg",
+  primaryColor: "#0F766E",
+  secondaryColor: "#FBBF24",
+  accentColor: "#115E59",
+};
+---
+
+<!-- DEMO – Página con dashboard + chat conversacional (NO PRODUCCIÓN) -->
+<BaseLayout brand={branding}>
+  <section class="space-y-2 mb-8">
+    <p class="text-sm uppercase tracking-wide text-emerald-700 font-semibold">Demo Pozo360</p>
+    <h1 class="text-3xl font-bold text-emerald-900">Inventario en pozo con copiloto conversacional</h1>
+    <p class="text-neutral-600">
+      Explorá proyectos, unidades e inversores con datos ficticios y probá el chat que responde al instante sobre el inventario. Pensado para mostrar el flujo comercial de Pozo360 end-to-end.
+    </p>
+  </section>
+
+  <section class="grid gap-8 xl:grid-cols-[2fr,1fr]">
+    <div class="space-y-8">
+      <CodexDemoDashboard client:load />
+      <CodexDemoLeadsFlow client:load />
+    </div>
+    <CodexDemoChat client:load />
+  </section>
+</BaseLayout>

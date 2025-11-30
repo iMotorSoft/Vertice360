@@ -1,0 +1,42 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import AgDemoDashboard from "../../../components/demo/antigravity/AgDemoDashboard.svelte";
+import AgDemoLeadsFlow from "../../../components/demo/antigravity/AgDemoLeadsFlow.svelte";
+
+const brand = {
+  displayName: "Pozo360 Demo",
+  logoUrl: "/logo-placeholder.svg",
+  primaryColor: "#4F46E5", // Indigo
+  secondaryColor: "#EC4899", // Pink
+  accentColor: "#10B981", // Emerald
+};
+---
+
+<BaseLayout brand={brand}>
+  <div class="space-y-8">
+    <!-- Header de la Demo -->
+    <div class="text-center space-y-2">
+      <div class="badge badge-primary badge-outline mb-2">DEMO Antigravity (AG-UI)</div>
+      <h1 class="text-4xl font-extrabold tracking-tight text-base-content">
+        Pozo360 <span class="text-primary">Dashboard</span>
+      </h1>
+      <p class="text-lg text-neutral-500 max-w-2xl mx-auto">
+        Esta es una demostración generada automáticamente. Los datos mostrados son ficticios y provienen del módulo de prueba.
+        <span class="font-bold text-warning">NO PRODUCCIÓN.</span>
+      </p>
+    </div>
+
+    <!-- Tabs de Navegación (DaisyUI) -->
+    <div role="tablist" class="tabs tabs-lifted tabs-lg">
+      <input type="radio" name="demo_tabs" role="tab" class="tab" aria-label="Proyectos" checked />
+      <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
+        <AgDemoDashboard client:load />
+      </div>
+
+      <input type="radio" name="demo_tabs" role="tab" class="tab" aria-label="Leads & Operaciones" />
+      <div role="tabpanel" class="tab-content bg-base-100 border-base-300 rounded-box p-6">
+        <AgDemoLeadsFlow client:load />
+      </div>
+    </div>
+  </div>
+</BaseLayout>

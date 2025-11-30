@@ -1,82 +1,35 @@
 BSD
 source .venv/bin/activate
 
-******* Grupos
-PILAGA No reflejado en Bco
-Banco No reflejado en PILAGA
-Conciliados 1 a 1
-Agrupados (<= 1)
-Sugeridos
-*************
-Por favor revisas los algoritmos, estos son todos los archivos que tenemos, pero ningun caso esta dando sugeridos, porque
+Usé “LangGraph” como etiqueta conceptual, pero la implementación es directa
+  con OpenAI (gpt-4o-mini) sin orquestador externo. Flujo actual:
 
-directorio
-/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/SpendIQ/Doc/FCE/Conciliacion
+  - Endpoint: POST /api/demo/codex/chat (backend/routes/demo_codex_chat.py).
+    Recibe { prompt, history } (roles user/assistant).
+  - Servicio: backend/services/demo_codex_chat.py. Arma mensajes:
+      - 2 mensajes system: uno con las reglas (“LainGraph, responde breve en
+        español…”) y otro con el contexto del mock (proyectos, inversores,
+        operaciones de db/demo_pozo360_data.py).
+      - El historial (si viene) y el prompt del usuario.
+  - Llama a OpenAI().chat.completions.create(model=gpt-4o-mini, temperature=0.2)
+    y devuelve reply, model, usage, meta.
+  - Front: astro/src/components/demo/codex/CodexDemoChat.svelte usa ese endpoint
+    y muestra el chat en la página astro/src/pages/demo/codex/dashboard-
+    chat.astro.
 
-Extractos
-09 - EXTRACTO.xlsx (ciudad)
-EXTRACTO PATAGONIA AGOST-SEPT.xlsx
-EXTRACTO SANTANDER AGOST-SEPT.xlsx
-Extracto Ciudad julio.xlsx
+  Para usar “LangGraph” real:
 
-Contable
-09 - PILAGA.xlsx (ciudad)
-PILAGA PATAGONIA AGOST-SEPT.xlsx
-PILAGA SANTANDER AGOST -SEPT.xlsx
-PILAGA CIUDAD JULIO.xlsx
+  1. Definir un gráfico (p. ej. nodes: “context builder” → “model call” →
+     “guardrails”).
+  2. Exponer un handler HTTP que ejecute ese gráfico; el payload podría ser
+     igual { prompt, history }.
+  3. Sustituir en run_demo_chat la llamada directa a OpenAI por la ejecución del
+     gráfico, y conservar el contrato de respuesta (reply/model/usage/meta) para
+     no romper el front.
 
-**************
-Estos son nuestra areas
-PILAGA No reflejado en Bco
-Banco No reflejado en PILAGA
-Conciliados 1 a 1
-Agrupados (<= 1)
-Sugeridos
+  Si querés, implemento un LangGraph sencillo con un nodo de contexto + nodo de
+  LLM y lo conectamos al mismo endpoint.
 
-que no se lance ningun proceso en forma automatica, lo vamos hacer explicito.
-
-Empecemos por el primero
-PILAGA No reflejado en Bco
-en la misma line despues de  de op y total a la derecha poner un pequeño boton que diga calcular
-
-primero decime que entendiste
-*********************
-Necesito que compares 2 archivos de extractos bancarios. Para decidir que logica de codigo usamos, no hagas nada solo pruebas que necesites hacer pero que no toquen ningun codigo existente
-
-archivo 1 es usado en la logica del codigo
-/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/SpendIQ/Doc/FCE/Conciliacion/09 - EXTRACTO.xlsx
-
-archivo 2 es el nuevo que no coincide
-/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/SpendIQ/Doc/FCE/10- Octubre Extracto.xlsx
-
-
-*********************
-Necesito que compares 2 archivos contables. Para decidir que logica de codigo usamos, no hagas nada solo pruebas que necesites hacer pero que no toquen ningun codigo existente
-
-archivo 1 es usado en la logica del codigo
-/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/SpendIQ/Doc/FCE/Conciliacion/09 - PILAGA.xlsx
-
-archivo 2 es el nuevo que no coincide
-/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/SpendIQ/Doc/FCE/10- Octubre Pilaga.xlsx
-
-**********************************
-te paso los archivos reales
-extracto
-/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/SpendIQ/Doc/FCE/10- Octubre Extracto.xlsx
-
-contable
-/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/SpendIQ/Doc/FCE/10- Octubre Pilaga.xlsx
-
-la descomposicion dio todo 0
-
-Descomposición de movimientos
-
-Estas cuatro categorías son disjuntas y suman el resultado del período de cada lado.
-Categoría	Banco	PILAGA
-Conciliados 1→1	0 op · $0,00	0 op · $0,00
-Agrupados (≤ $1)	0 op · $0,00	0 op · $0,00
-Sugeridos (>$1 y ≤ $5)	0 op · $0,00	0 op · $0,00
-No reflejado	Banco no reflejado en PILAGA: 308 op · $175.970.085,39	PILAGA no reflejado en Banco: 34 op · $-2.395.959.004,62
 
 
 
