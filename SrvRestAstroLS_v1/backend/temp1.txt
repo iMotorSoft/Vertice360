@@ -1,5 +1,15 @@
 BSD
+nano ~/.bashrc
+source ~/.bashrc
 source .venv/bin/activate
+
+sftp://administrator@imotorsoft.com/home/administrator/project/iMotorSoft/ai/Vertice360
+
+Por favor tenes que usar en lo componente svelte la variable URL_REST
+/src/components/global.js
+import { URL_REST } from '../global';
+
+en todas las llamadas a los endpoint esta es la convencion a tomar
 
 Usé “LangGraph” como etiqueta conceptual, pero la implementación es directa
   con OpenAI (gpt-4o-mini) sin orquestador externo. Flujo actual:
@@ -9,7 +19,7 @@ Usé “LangGraph” como etiqueta conceptual, pero la implementación es direct
   - Servicio: backend/services/demo_codex_chat.py. Arma mensajes:
       - 2 mensajes system: uno con las reglas (“LainGraph, responde breve en
         español…”) y otro con el contexto del mock (proyectos, inversores,
-        operaciones de db/demo_pozo360_data.py).
+        operaciones de db/demo_vertice360_data.py).
       - El historial (si viene) y el prompt del usuario.
   - Llama a OpenAI().chat.completions.create(model=gpt-4o-mini, temperature=0.2)
     y devuelve reply, model, usage, meta.
@@ -29,7 +39,6 @@ Usé “LangGraph” como etiqueta conceptual, pero la implementación es direct
 
   Si querés, implemento un LangGraph sencillo con un nodo de contexto + nodo de
   LLM y lo conectamos al mismo endpoint.
-
 
 
 

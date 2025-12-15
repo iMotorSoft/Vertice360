@@ -1,4 +1,4 @@
-/* Tailwind config for Pozo360 Astro + Svelte */
+/* Tailwind config for Vertice360 Astro + Svelte */
 module.exports = {
   content: ["./src/**/*.{astro,html,js,jsx,ts,tsx,svelte}"],
   theme: {
@@ -16,7 +16,7 @@ module.exports = {
   daisyui: {
     themes: [
       {
-        pozo360: {
+        vertice360: {
           primary: "var(--brand-primary)",
           secondary: "var(--brand-secondary)",
           accent: "var(--brand-accent)",

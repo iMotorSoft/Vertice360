@@ -1,7 +1,7 @@
-<!-- DEMO – Inventario Pozo360 (NO PRODUCCIÓN) -->
+<!-- DEMO – Inventario Vertice360 (NO PRODUCCIÓN) -->
 <script lang="ts">
   import { onMount } from "svelte";
-  import { API_BASE_URL } from "../../../config/api";
+  import { URL_REST } from "../../global";
 
   type Project = {
     id_proyecto: string;
@@ -71,7 +71,7 @@
     loadingProjects = true;
     error = null;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/demo/codex/projects`);
+      const res = await fetch(`${URL_REST}/api/demo/codex/projects`);
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -92,7 +92,7 @@
     unitError = null;
     loadingUnits = true;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/demo/codex/projects/${project.id_proyecto}/units`);
+      const res = await fetch(`${URL_REST}/api/demo/codex/projects/${project.id_proyecto}/units`);
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -108,7 +108,7 @@
     loadingInvestors = true;
     investorError = null;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/demo/codex/investors`);
+      const res = await fetch(`${URL_REST}/api/demo/codex/investors`);
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -124,7 +124,7 @@
     if (operationsByInvestor[investorId]) return;
     investorError = null;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/demo/codex/investors/${investorId}/operations`);
+      const res = await fetch(`${URL_REST}/api/demo/codex/investors/${investorId}/operations`);
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }

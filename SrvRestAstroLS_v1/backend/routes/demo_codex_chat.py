@@ -1,4 +1,4 @@
-"""Ruta demo de chat (LainGraph) sobre datos mock de Pozo360."""
+"""Ruta demo de chat (LainGraph) sobre datos mock de Vertice360."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
-# Servidor DEMO Pozo360 – usa mock/demo data y expone la demo Codex:
+# Servidor DEMO Vertice360 – usa mock/demo data y expone la demo Codex:
 # - /demo/codex/* (Codex CLI)
-# Este launcher también expone la demo Antigravity (AG-UI) de Pozo360 bajo /api/demo/ag y /demo/antigravity (NO PRODUCCIÓN).
+# Este launcher también expone la demo Antigravity (AG-UI) de Vertice360 bajo /api/demo/ag y /demo/antigravity (NO PRODUCCIÓN).
 # NO usar este launcher para producción.
 
 import sys
@@ -17,9 +17,9 @@ if str(ROOT_DIR) not in sys.path:
 
 import globalVar  # noqa: E402
 from middleware.tenant_context import TenantContextMiddleware  # noqa: E402
-from routes.demo_codex_pozo360 import router as codex_demo_router  # noqa: E402
+from routes.demo_codex_vertice360 import router as codex_demo_router  # noqa: E402
 from routes.demo_codex_chat import router as codex_chat_router  # noqa: E402
-from routes.demo_ag_pozo360 import router as ag_demo_router  # noqa: E402
+from routes.demo_ag_vertice360 import router as ag_demo_router  # noqa: E402
 from routes.health import health_check  # noqa: E402
 from routes.version import version  # noqa: E402
 

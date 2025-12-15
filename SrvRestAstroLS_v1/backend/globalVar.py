@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# pozo360 / globalVar.py
+# vertice360 / globalVar.py
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ from typing import Literal, Optional
 # =========================
 # App / environment
 # =========================
-APP_NAME: str = "Pozo360"
-APP_VERSION: str = os.environ.get("POZO360_APP_VERSION", "0.1.0")
-ENVIRONMENT: Literal["dev", "stg", "prod"] = os.environ.get("POZO360_ENV", "dev")
+APP_NAME: str = "Vertice360"
+APP_VERSION: str = os.environ.get("VERTICE360_APP_VERSION", "0.1.0")
+ENVIRONMENT: Literal["dev", "stg", "prod"] = os.environ.get("VERTICE360_ENV", "dev")
 RUN_ENV: Literal["dev", "stg", "prod"] = ENVIRONMENT
 
 ENABLE_PRUEBAS: bool = False
@@ -24,26 +24,26 @@ LOG_LEVEL: str = "DEBUG" if DEBUG else "INFO"
 # =========================
 # API server
 # =========================
-HOST: str = os.environ.get("POZO360_HOST", "0.0.0.0")
-PORT: int = int(os.environ.get("POZO360_PORT", "7062"))
+HOST: str = os.environ.get("VERTICE360_HOST", "0.0.0.0")
+PORT: int = int(os.environ.get("VERTICE360_PORT", "7062"))
 
 # =========================
 # Project / data roots
 # =========================
-# Este archivo vive en: .../Pozo360/SrvRestAstroLS_v1/backend/globalVar.py
+# Este archivo vive en: .../Vertice360/SrvRestAstroLS_v1/backend/globalVar.py
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[1]
-POZO360_ROOT: Path = PROJECT_ROOT  # alias
+VERTICE360_ROOT: Path = PROJECT_ROOT  # alias
 
-_storage_provider = os.environ.get("POZO360_STORAGE_PROVIDER", "local")
+_storage_provider = os.environ.get("VERTICE360_STORAGE_PROVIDER", "local")
 STORAGE_PROVIDER: Literal["local", "s3"] = "s3" if _storage_provider == "s3" else "local"
 STORAGE_LOCAL_ROOT: str = os.environ.get(
-    "POZO360_STORAGE_LOCAL_ROOT", (POZO360_ROOT / "storage").as_posix()
+    "VERTICE360_STORAGE_LOCAL_ROOT", (VERTICE360_ROOT / "storage").as_posix()
 )
 STORAGE_INCOMING: str = "incoming"
 STORAGE_CANONICAL: str = "canonical"
 STORAGE_ARCHIVES: str = "archives"
 
-DATA_ROOT: str = os.environ.get("POZO360_DATA_ROOT", (POZO360_ROOT / "data").as_posix())
+DATA_ROOT: str = os.environ.get("VERTICE360_DATA_ROOT", (VERTICE360_ROOT / "data").as_posix())
 DATA_REPORTS: str = "reports"
 
 PARTITION_ACCOUNT: str = "account"
@@ -53,17 +53,17 @@ PARTITION_PERIOD: str = "period"  # YYYY-MM
 # Database
 # =========================
 DB_URL: str = os.environ.get(
-    "POZO360_DB_URL",
-    "postgresql+psycopg://user:pass@localhost:5432/pozo360",
+    "VERTICE360_DB_URL",
+    "postgresql+psycopg://user:pass@localhost:5432/vertice360",
 )
-DB_SCHEMA: str = os.environ.get("POZO360_DB_SCHEMA", "public")
+DB_SCHEMA: str = os.environ.get("VERTICE360_DB_SCHEMA", "public")
 ENABLE_PG_TRGM: bool = True
 ENABLE_PG_VECTOR: bool = True
 
 # =========================
 # Security / Roles
 # =========================
-JWT_SECRET: str = os.environ.get("POZO360_JWT_SECRET", "change_me_dev_only")
+JWT_SECRET: str = os.environ.get("VERTICE360_JWT_SECRET", "change_me_dev_only")
 JWT_ISSUER: str = APP_NAME
 JWT_AUDIENCE: str = f"{APP_NAME}-app"
 ROLES: tuple[str, ...] = ("ADMIN", "OPERATOR", "AUDITOR", "VIEWER")
@@ -83,20 +83,20 @@ RULES_RULESETS_DIR: str = f"{RULES_DIR}/rulesets"
 # LLM / OpenAI (compat)
 # =========================
 OpenAI_Key: Optional[str] = (
-    os.environ.get("POZO360_OPENAI_KEY")
+    os.environ.get("VERTICE360_OPENAI_KEY")
     or os.environ.get("OPENAI_API_KEY")
 )
-OpenAI_Model: str = os.environ.get("POZO360_OPENAI_MODEL", "gpt-4o-mini")
+OpenAI_Model: str = os.environ.get("VERTICE360_OPENAI_MODEL", "gpt-4o-mini")
 
 # =========================
 # MLflow (optional)
 # =========================
 MLFLOW_TRACKING_URI_DEV: str = os.environ.get(
-    "POZO360_MLFLOW_TRACKING_URI_DEV",
-    f"file://{(PROJECT_ROOT / 'mlruns_pozo360').as_posix()}",
+    "VERTICE360_MLFLOW_TRACKING_URI_DEV",
+    f"file://{(PROJECT_ROOT / 'mlruns_vertice360').as_posix()}",
 )
 MLFLOW_TRACKING_URI_PRO: str = os.environ.get(
-    "POZO360_MLFLOW_TRACKING_URI_PRO", MLFLOW_TRACKING_URI_DEV
+    "VERTICE360_MLFLOW_TRACKING_URI_PRO", MLFLOW_TRACKING_URI_DEV
 )
 MLFLOW_TRACKING_URI: str = MLFLOW_TRACKING_URI_DEV if RUN_ENV != "prod" else MLFLOW_TRACKING_URI_PRO
 
@@ -121,8 +121,8 @@ def resolve_storage_uri(
             base = base / filename
         return f"file://{base.as_posix()}"
 
-    bucket = os.environ.get("POZO360_S3_BUCKET", "pozo360-bucket")
-    prefix = os.environ.get("POZO360_S3_PREFIX", "storage")
+    bucket = os.environ.get("VERTICE360_S3_BUCKET", "vertice360-bucket")
+    prefix = os.environ.get("VERTICE360_S3_PREFIX", "storage")
     parts = [prefix, kind]
     if kind == "canonical":
         if account_id is not None:

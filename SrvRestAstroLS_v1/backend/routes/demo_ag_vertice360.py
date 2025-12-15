@@ -1,8 +1,8 @@
-# DEMO – Generado con Antigravity (AG-UI) para Pozo360 (NO PRODUCCIÓN)
+# DEMO – Generado con Antigravity (AG-UI) para Vertice360 (NO PRODUCCIÓN)
 
 from litestar import Router, get
-from backend.modules.demo_ag_pozo360 import services, validators
-from backend.modules.demo_ag_pozo360.schemas import (
+from backend.modules.demo_ag_vertice360 import services, validators
+from backend.modules.demo_ag_vertice360.schemas import (
     ProyectoDemo,
     UnidadDemo,
     InversorDemo,

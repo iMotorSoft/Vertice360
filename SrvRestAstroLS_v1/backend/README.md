@@ -1,4 +1,4 @@
-# Pozo360 Backend
+# Vertice360 Backend
 
 Backend service built with Litestar (Python 3.12) and managed with `uv`.
 
@@ -14,6 +14,6 @@ Backend service built with Litestar (Python 3.12) and managed with `uv`.
 
 ## Structure
 
-Routes, models, middleware, and AG-UI Pozo Flow modules are organized under `SrvRestAstroLS_v1/backend` following a clean, modular layout. Global settings live in `SrvRestAstroLS_v1/backend/globalVar.py`.
+Routes, models, middleware, and AG-UI Vertice Flow modules are organized under `SrvRestAstroLS_v1/backend` following a clean, modular layout. Global settings live in `SrvRestAstroLS_v1/backend/globalVar.py`.
 
 `backend/globalVar.py` centralizes app metadata, server host/port, and MLflow placeholders (read from environment variables only).

@@ -1,4 +1,4 @@
-<!-- DEMO – Componente generado con Antigravity (AG-UI) para Pozo360 (NO PRODUCCIÓN) -->
+<!-- DEMO – Componente generado con Antigravity (AG-UI) para Vertice360 (NO PRODUCCIÓN) -->
 <script>
   import { onMount } from 'svelte';
 
@@ -187,7 +187,7 @@
           </label>
           <select class="select select-bordered">
             <option disabled selected>Seleccionar...</option>
-            <option>Inversión en Pozo</option>
+            <option>Inversión en Vertice</option>
             <option>Compra Final</option>
             <option>Alquiler</option>
           </select>

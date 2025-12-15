@@ -1,7 +1,7 @@
-<!-- DEMO – Simulador comercial Pozo360 (NO PRODUCCIÓN) -->
+<!-- DEMO – Simulador comercial Vertice360 (NO PRODUCCIÓN) -->
 <script lang="ts">
   import { onMount } from "svelte";
-  import { API_BASE_URL } from "../../../config/api";
+  import { URL_REST } from "../../global";
 
   type Project = {
     id_proyecto: string;
@@ -66,7 +66,7 @@
     loadingProjects = true;
     error = null;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/demo/codex/projects`);
+      const res = await fetch(`${URL_REST}/api/demo/codex/projects`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       projects = await res.json();
     } catch (err) {
@@ -80,7 +80,7 @@
     loadingInvestors = true;
     error = null;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/demo/codex/investors`);
+      const res = await fetch(`${URL_REST}/api/demo/codex/investors`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       investors = await res.json();
     } catch (err) {
@@ -98,7 +98,7 @@
     loadingUnits = true;
     unitError = null;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/demo/codex/projects/${projectId}/units`);
+      const res = await fetch(`${URL_REST}/api/demo/codex/projects/${projectId}/units`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       units = await res.json();
     } catch (err) {

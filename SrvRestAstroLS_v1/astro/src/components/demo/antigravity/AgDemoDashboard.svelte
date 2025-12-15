@@ -1,4 +1,4 @@
-<!-- DEMO – Componente generado con Antigravity (AG-UI) para Pozo360 (NO PRODUCCIÓN) -->
+<!-- DEMO – Componente generado con Antigravity (AG-UI) para Vertice360 (NO PRODUCCIÓN) -->
 <script>
   import { onMount } from 'svelte';
 

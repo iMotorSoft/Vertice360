@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { API_BASE_URL } from "../config/api";
+  import { URL_REST } from "./global";
 
   let health = $state<Record<string, unknown> | null>(null);
   let loading = $state(true);
@@ -8,7 +8,7 @@
 
   onMount(async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/health`);
+      const res = await fetch(`${URL_REST}/health`);
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }

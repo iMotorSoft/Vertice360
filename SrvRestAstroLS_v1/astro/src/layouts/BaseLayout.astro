@@ -11,11 +11,11 @@ const brand = Astro.props.brand ?? {
 ---
 
 <!doctype html>
-<html lang="es" data-theme="pozo360">
+<html lang="es" data-theme="vertice360">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pozo360</title>
+    <title>Vertice360</title>
   </head>
   <body
     style={`--brand-primary:${brand.primaryColor};--brand-secondary:${brand.secondaryColor};--brand-accent:${brand.accentColor};`}
@@ -26,7 +26,7 @@ const brand = Astro.props.brand ?? {
         <img src={brand.logoUrl || "/logo-placeholder.svg"} alt="Logo" class="h-10 w-10 rounded" loading="lazy" />
         <div class="flex flex-col">
           <span class="font-semibold text-lg">{brand.displayName}</span>
-          <span class="text-sm text-neutral-500">Pozo360</span>
+          <span class="text-sm text-neutral-500">Vertice360</span>
         </div>
       </div>
     </header>

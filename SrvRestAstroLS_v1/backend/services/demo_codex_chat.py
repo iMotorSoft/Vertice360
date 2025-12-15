@@ -1,4 +1,4 @@
-"""Servicio de chat demo para Pozo360 usando LainGraph (gpt-4o-mini)."""
+"""Servicio de chat demo para Vertice360 usando LainGraph (gpt-4o-mini)."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ from typing import Any
 from openai import OpenAI
 
 import globalVar
-from db import demo_pozo360_data
+from db import demo_vertice360_data
 
-# Prompt base para contextualizar al modelo con el mock de Pozo360.
+# Prompt base para contextualizar al modelo con el mock de Vertice360.
 SYSTEM_PROMPT = (
-    "Eres LainGraph, asistente demo de Pozo360. "
+    "Eres LainGraph, asistente demo de Vertice360. "
     "Responde en español, breve y accionable. "
     "Usa solo los datos de la demo /api/demo/codex/*. Si no encuentras un dato, dilo."
 )
@@ -22,24 +22,24 @@ def _format_demo_context() -> str:
     projects = "\n".join(
         f"- {p['id_proyecto']}: {p['nombre']} ({p['ciudad']}, {p['estado']}), "
         f"precio USD {p['precio_desde']}–{p['precio_hasta']}"
-        for p in demo_pozo360_data.proyectos_en_pozo
+        for p in demo_vertice360_data.proyectos_en_pozo
     )
     units = "\n".join(
         f"- {u['id_unidad']} ({u['id_proyecto']}): {u['ambiente']}, piso {u['piso']}, "
         f"{u['estado_unidad']}, USD {u['precio_lista']}"
-        for u in demo_pozo360_data.unidades
+        for u in demo_vertice360_data.unidades
     )
     investors = "\n".join(
         f"- {i['id_inversor']}: {i['nombre']} ({i['tipo_inversor']}, {i['pais']})"
-        for i in demo_pozo360_data.inversores
+        for i in demo_vertice360_data.inversores
     )
     operations = "\n".join(
         f"- {op['id_operacion']}: {op['tipo_operacion']} de {op['id_unidad']} "
         f"por {op['id_inversor']} el {op['fecha']} (USD {op['monto']})"
-        for op in demo_pozo360_data.reservas_y_ventas
+        for op in demo_vertice360_data.reservas_y_ventas
     )
     return (
-        "Contexto demo Pozo360:\n"
+        "Contexto demo Vertice360:\n"
         f"Proyectos:\n{projects}\n\n"
         f"Unidades:\n{units}\n\n"
         f"Inversores:\n{investors}\n\n"
@@ -55,7 +55,7 @@ def run_demo_chat(prompt: str, history: list[dict[str, str]] | None = None) -> d
 
     api_key = globalVar.OpenAI_Key
     if not api_key:
-        raise RuntimeError("Falta OpenAI API key (POZO360_OPENAI_KEY u OPENAI_API_KEY).")
+        raise RuntimeError("Falta OpenAI API key (VERTICE360_OPENAI_KEY u OPENAI_API_KEY).")
 
     client = OpenAI(api_key=api_key)
 

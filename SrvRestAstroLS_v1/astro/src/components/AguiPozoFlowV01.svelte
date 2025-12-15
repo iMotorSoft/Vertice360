@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { API_BASE_URL } from "../config/api";
+  import { URL_REST } from "./global";
   import { DEFAULT_LOCALE, STRINGS } from "../config/strings";
 
   const locale = DEFAULT_LOCALE;
@@ -16,7 +16,7 @@
     result = null;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/agui/pozo/flow/v1/run`, {
+      const res = await fetch(`${URL_REST}/api/agui/pozo/flow/v1/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text })

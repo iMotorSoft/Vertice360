@@ -1,6 +1,6 @@
-<!-- DEMO – Copiloto de inventario Pozo360 (chat sobre datos mock) -->
+<!-- DEMO – Copiloto de inventario Vertice360 (chat sobre datos mock) -->
 <script lang="ts">
-  import { API_BASE_URL } from "../../../config/api";
+  import { URL_REST } from "../../global";
 
   type ChatMessage = {
     role: "user" | "assistant";
@@ -15,10 +15,11 @@
     {
       role: "assistant",
       content:
-        "Soy el copiloto de inventario Pozo360 (demo). Preguntá por proyectos, inversores o reservas y cito los IDs.",
-      timestamp: new Date().toISOString(),
+        "Soy el copiloto de inventario Vertice360 (demo). Preguntá por proyectos, inversores o reservas y cito los IDs.",
+        timestamp: new Date().toISOString(),
     },
   ]);
+  let messagesContainer: HTMLDivElement | null = null;
 
   const formatTime = (iso: string) =>
     new Date(iso).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
@@ -35,7 +36,7 @@
     loading = true;
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/demo/codex/chat`, {
+      const res = await fetch(`${URL_REST}/api/demo/codex/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -58,6 +59,9 @@
           timestamp: new Date().toISOString(),
         },
       ];
+      requestAnimationFrame(() => {
+        messagesContainer?.scrollTo({ top: 0, behavior: "smooth" });
+      });
     } catch (err) {
       error = err instanceof Error ? err.message : "Error desconocido al consultar el chat.";
     } finally {
@@ -90,7 +94,10 @@
       <p>Envía texto libre; el backend arma el prompt con los IDs del mock.</p>
     </div>
 
-    <div class="border border-base-200 rounded-lg h-80 overflow-y-auto p-3 space-y-3 bg-base-100">
+    <div
+      class="border border-base-200 rounded-lg max-h-[60vh] min-h-[18rem] overflow-y-auto p-3 space-y-3 bg-base-100"
+      bind:this={messagesContainer}
+    >
       {#each [...messages].reverse() as msg, idx (msg.timestamp + idx)}
         <div class={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`} aria-live={idx === messages.length - 1 ? "polite" : "off"}>
           <div

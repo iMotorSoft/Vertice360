@@ -1,5 +1,5 @@
 """
-Litestar application entrypoint for Pozo360.
+Litestar application entrypoint for Vertice360.
 Run with: uv run python ls_iMotorSoft_Srv01.py
 """
 

@@ -6,4 +6,4 @@ from models.common import HealthResponse
 @get("/health")
 async def health_check() -> HealthResponse:
     """Simple health endpoint."""
-    return HealthResponse(status="ok", service="Pozo360")
+    return HealthResponse(status="ok", service="Vertice360")

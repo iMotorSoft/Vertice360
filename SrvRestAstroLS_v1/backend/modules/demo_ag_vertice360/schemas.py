@@ -1,4 +1,4 @@
-# DEMO – Generado con Antigravity (AG-UI) para Pozo360 (NO PRODUCCIÓN)
+# DEMO – Generado con Antigravity (AG-UI) para Vertice360 (NO PRODUCCIÓN)
 
 from dataclasses import dataclass
 from typing import Optional

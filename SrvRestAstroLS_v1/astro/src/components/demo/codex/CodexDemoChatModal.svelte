@@ -19,7 +19,7 @@
 </div>
 
 <dialog class="modal" bind:this={modalEl}>
-  <div class="modal-box w-11/12 max-w-5xl h-[85vh] p-0 overflow-hidden">
+  <div class="modal-box w-11/12 max-w-5xl max-h-[90vh] p-0 overflow-hidden flex flex-col">
     <div class="flex items-center justify-between px-4 py-3 border-b border-base-200 bg-base-100">
       <div>
         <p class="text-xs uppercase tracking-wide text-neutral-500 font-semibold">Copiloto de inventario</p>
@@ -28,7 +28,7 @@
       </div>
       <button class="btn btn-ghost btn-sm" on:click={closeModal} aria-label="Cerrar chat">✕</button>
     </div>
-    <div class="flex-1 overflow-hidden p-3 bg-base-50">
+    <div class="flex-1 overflow-auto p-3 bg-base-50">
       <CodexDemoChat />
     </div>
   </div>

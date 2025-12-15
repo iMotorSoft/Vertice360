@@ -1,7 +1,7 @@
-# DEMO – Generado con Antigravity (AG-UI) para Pozo360 (NO PRODUCCIÓN)
+# DEMO – Generado con Antigravity (AG-UI) para Vertice360 (NO PRODUCCIÓN)
 
-from backend.db import demo_pozo360_data
-from backend.modules.demo_ag_pozo360.schemas import (
+from backend.db import demo_vertice360_data
+from backend.modules.demo_ag_vertice360.schemas import (
     ProyectoDemo,
     UnidadDemo,
     InversorDemo,
@@ -9,7 +9,7 @@ from backend.modules.demo_ag_pozo360.schemas import (
 )
 
 def list_demo_projects() -> list[ProyectoDemo]:
-    raw_projects = demo_pozo360_data.get_demo_projects()
+    raw_projects = demo_vertice360_data.get_demo_projects()
     return [
         ProyectoDemo(
             id_proyecto=p["id_proyecto"],
@@ -26,7 +26,7 @@ def list_demo_projects() -> list[ProyectoDemo]:
     ]
 
 def list_demo_units_for_project(id_proyecto: str) -> list[UnidadDemo]:
-    raw_units = demo_pozo360_data.get_demo_units_for_project(id_proyecto)
+    raw_units = demo_vertice360_data.get_demo_units_for_project(id_proyecto)
     return [
         UnidadDemo(
             id_unidad=u["id_unidad"],
@@ -43,7 +43,7 @@ def list_demo_units_for_project(id_proyecto: str) -> list[UnidadDemo]:
     ]
 
 def list_demo_investors() -> list[InversorDemo]:
-    raw_investors = demo_pozo360_data.get_demo_investors()
+    raw_investors = demo_vertice360_data.get_demo_investors()
     return [
         InversorDemo(
             id_inversor=i["id_inversor"],
@@ -56,7 +56,7 @@ def list_demo_investors() -> list[InversorDemo]:
     ]
 
 def list_demo_operations_for_investor(id_inversor: str) -> list[OperacionDemo]:
-    raw_ops = demo_pozo360_data.get_demo_operations_for_investor(id_inversor)
+    raw_ops = demo_vertice360_data.get_demo_operations_for_investor(id_inversor)
     return [
         OperacionDemo(
             id_operacion=o["id_operacion"],
