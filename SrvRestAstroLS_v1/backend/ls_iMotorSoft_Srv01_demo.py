@@ -26,6 +26,8 @@ from backend.modules.agui_stream import agui_stream, debug_trigger_event  # noqa
 from backend.modules.crm_demo import crm_router  # noqa: E402
 from routes.demo_sse_test import SseTestController  # noqa: E402
 from backend.modules.messaging.webhooks import webhook_router  # noqa: E402
+from backend.telemetry.logging import setup_logging  # noqa: E402
+from backend.middleware.telemetry_middleware import TelemetryMiddleware  # noqa: E402
 
 
 def create_app() -> Litestar:
@@ -42,7 +44,7 @@ def create_app() -> Litestar:
         SseTestController,
         webhook_router,
     ]
-    middleware = [DefineMiddleware(TenantContextMiddleware)]
+    middleware = [DefineMiddleware(TenantContextMiddleware), DefineMiddleware(TelemetryMiddleware)]
     # Abrimos CORS en modo demo para permitir llamadas desde Astro (dev/preview).
     cors_config = CORSConfig(
         allow_origins=[
@@ -66,6 +68,7 @@ def create_app() -> Litestar:
 
 
 app = create_app()
+setup_logging()  # Configure formatted logging on startup
 
 
 if __name__ == "__main__":
