@@ -8,7 +8,8 @@ export const SITE_DESCRIPTION =
 const URL_REST_DEV = 'http://localhost:7062';
 const URL_REST_PRO = 'https://demo.vertice360.imotorsoft.com';
 
-export const URL_REST = URL_REST_PRO; // cambialo a URL_REST_DEV para apuntar al backend local
+export const URL_REST = URL_REST_DEV; // cambialo a URL_REST_PRO para apuntar al backend remoto
+export const URL_SSE = `${URL_REST}/api/agui/stream`;
 
 const CLOUDFLARE_SITEKEY_DEV = '0x4AAAAAAA9n8PW8yOWCn_6j';
 const CLOUDFLARE_SITEKEY_PRO = '0x4AAAAAAA9glDuv7vktGmhn';

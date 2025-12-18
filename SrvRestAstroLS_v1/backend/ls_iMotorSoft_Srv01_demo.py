@@ -22,11 +22,26 @@ from routes.demo_codex_chat import router as codex_chat_router  # noqa: E402
 from routes.demo_ag_vertice360 import router as ag_demo_router  # noqa: E402
 from routes.health import health_check  # noqa: E402
 from routes.version import version  # noqa: E402
+from backend.modules.agui_stream import agui_stream, debug_trigger_event  # noqa: E402
+from backend.modules.crm_demo import crm_router  # noqa: E402
+from routes.demo_sse_test import SseTestController  # noqa: E402
+from backend.modules.messaging.webhooks import webhook_router  # noqa: E402
 
 
 def create_app() -> Litestar:
     """Construye la app Litestar de demo Codex."""
-    route_handlers = [health_check, version, codex_demo_router, codex_chat_router, ag_demo_router]
+    route_handlers = [
+        health_check,
+        version,
+        codex_demo_router,
+        codex_chat_router,
+        ag_demo_router,
+        agui_stream,
+        debug_trigger_event,
+        crm_router,
+        SseTestController,
+        webhook_router,
+    ]
     middleware = [DefineMiddleware(TenantContextMiddleware)]
     # Abrimos CORS en modo demo para permitir llamadas desde Astro (dev/preview).
     cors_config = CORSConfig(

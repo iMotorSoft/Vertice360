@@ -1,0 +1,25 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import AppShell from "../../../components/demo/crm/AppShell.svelte";
+
+const branding = {
+  displayName: "Vertice360 CRM Demo",
+  logoUrl: "/logo-placeholder.svg",
+  primaryColor: "#0F766E",
+  secondaryColor: "#60A5FA",
+  accentColor: "#0EA5E9",
+};
+---
+
+<BaseLayout brand={branding}>
+  <section class="space-y-2 mb-8">
+    <p class="text-sm uppercase tracking-wide text-sky-700 font-semibold">CRM Demo</p>
+    <h1 class="text-3xl font-bold text-slate-900">Real Estate CRM con inbox, pipeline y tareas</h1>
+    <p class="text-neutral-600">
+      Experiencia demo para equipos comerciales. Consume el backend mock en memoria y el stream SSE global para eventos en vivo.
+    </p>
+  </section>
+
+  <AppShell client:load />
+</BaseLayout>
+

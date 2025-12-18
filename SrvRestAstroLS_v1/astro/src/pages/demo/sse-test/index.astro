@@ -1,0 +1,17 @@
+---
+import Layout from '../../../layouts/BaseLayout.astro';
+import SseTestCard from '../../../components/demo/sse_test/SseTestCard.svelte';
+---
+
+<Layout title="SSE Smoke Test">
+	<main class="container mx-auto p-4 min-h-screen bg-base-200 flex flex-col items-center">
+		<h1 class="text-3xl font-bold mb-8">Vertice360 SSE Connectivity</h1>
+		
+		<!-- Svelte component loaded client-side only -->
+		<SseTestCard client:only="svelte" />
+		
+		<div class="mt-8 text-center text-sm opacity-60 max-w-md">
+			<p>This page tests the EventSource connection to the Litestar backend without passing through the main app logic.</p>
+		</div>
+	</main>
+</Layout>
