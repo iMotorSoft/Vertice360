@@ -1,7 +1,7 @@
 import logging
 import contextlib
 from typing import Optional, Dict, Any, Generator
-from .config import MLFLOW_ENABLED, MLFLOW_TRACKING_URI, MLFLOW_EXPERIMENT
+from ..globalVar import MLFLOW_ENABLED, MLFLOW_TRACKING_URI, MLFLOW_EXPERIMENT
 
 logger = logging.getLogger(__name__)
 

@@ -28,6 +28,15 @@ HOST: str = os.environ.get("VERTICE360_HOST", "0.0.0.0")
 PORT: int = int(os.environ.get("VERTICE360_PORT", "7062"))
 
 # =========================
+# Frontend / CORS
+# =========================
+FRONTEND_ORIGINS: list[str] = [
+    os.environ.get("VERTICE360_FE_URL_LOCAL", "http://localhost:3062"),
+    os.environ.get("VERTICE360_FE_URL_IP", "http://127.0.0.1:3062"),
+]
+
+
+# =========================
 # Project / data roots
 # =========================
 # Este archivo vive en: .../Vertice360/SrvRestAstroLS_v1/backend/globalVar.py
@@ -99,6 +108,19 @@ MLFLOW_TRACKING_URI_PRO: str = os.environ.get(
     "VERTICE360_MLFLOW_TRACKING_URI_PRO", MLFLOW_TRACKING_URI_DEV
 )
 MLFLOW_TRACKING_URI: str = MLFLOW_TRACKING_URI_DEV if RUN_ENV != "prod" else MLFLOW_TRACKING_URI_PRO
+MLFLOW_ENABLED: bool = os.environ.get("MLFLOW_ENABLED", "0") in ("1", "true", "True")
+MLFLOW_EXPERIMENT: str = os.environ.get("MLFLOW_EXPERIMENT", "vertice360")
+
+# =========================
+# Messaging / Meta WhatsApp Cloud (Vertice360)
+# =========================
+META_VERTICE360_WABA_TOKEN: str = os.environ.get("META_VERTICE360_WABA_TOKEN", "")
+META_VERTICE360_WABA_ID: str = os.environ.get("META_VERTICE360_WABA_ID", "")
+META_VERTICE360_PHONE_NUMBER_ID: str = os.environ.get("META_VERTICE360_PHONE_NUMBER_ID", "")
+META_VERTICE360_VERIFY_TOKEN: str = os.environ.get("META_VERTICE360_VERIFY_TOKEN", "")
+META_APP_SECRET_IMOTORSOFT: str = os.environ.get("META_APP_SECRET_IMOTORSOFT", "")
+META_GRAPH_VERSION: str = os.environ.get("META_GRAPH_VERSION", "v20.0")
+
 
 # =========================
 # Helpers
@@ -149,6 +171,13 @@ def mask(value: Optional[str], visible: int = 4) -> str:
         return ""
     return value[:visible] + "****"
 
+def meta_whatsapp_enabled() -> bool:
+    return bool(
+        META_VERTICE360_WABA_TOKEN
+        and META_VERTICE360_PHONE_NUMBER_ID
+        and META_VERTICE360_VERIFY_TOKEN
+    )
+
 def boot_log() -> None:
     print(f"[{APP_NAME}] version={APP_VERSION} env={RUN_ENV} debug={DEBUG} log={LOG_LEVEL}")
     print(f"[{APP_NAME}] host={HOST} port={PORT}")
@@ -158,3 +187,8 @@ def boot_log() -> None:
     print(f"[{APP_NAME}] rules_dir={RULES_DIR}")
     print(f"[{APP_NAME}] mlflow={MLFLOW_TRACKING_URI}")
     print(f"[{APP_NAME}] openai_key={mask(OpenAI_Key)} model={OpenAI_Model}")
+    print(f"[{APP_NAME}] meta_phone_id={META_VERTICE360_PHONE_NUMBER_ID} meta_graph={META_GRAPH_VERSION}")
+    print(
+        f"[{APP_NAME}] meta_verify_token={mask(META_VERTICE360_VERIFY_TOKEN)} "
+        f"meta_app_secret={mask(META_APP_SECRET_IMOTORSOFT)}"
+    )

@@ -43,7 +43,8 @@ class TelemetryMiddleware(MiddlewareProtocol):
         set_correlation_id(corr_id)
 
         method = scope.get("method", "UNKNOWN")
-        path = scope.get("path", "size")
+        path = scope.get("path", "")
+        print(f"\n>>> [MIDDLEWARE] New Request: {method} {path}")
         
         logger.info(f"START {method} {path}")
 

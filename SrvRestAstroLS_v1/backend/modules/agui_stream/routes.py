@@ -8,6 +8,7 @@ from litestar import Request, get, post, route
 from litestar.response import Response, Stream
 from pydantic import BaseModel
 
+from backend import globalVar
 from backend.modules.agui_stream.broadcaster import broadcaster
 
 BASE_SSE_HEADERS = {
@@ -16,13 +17,13 @@ BASE_SSE_HEADERS = {
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no",
 }
-ALLOWED_ORIGINS = {"http://localhost:3062", "http://127.0.0.1:3062"}
+ALLOWED_ORIGINS = set(globalVar.FRONTEND_ORIGINS)
 
 
 def build_sse_headers(origin: str | None) -> dict[str, str]:
     """Clone base headers and apply explicit CORS for SSE."""
     headers = dict(BASE_SSE_HEADERS)
-    allow_origin = origin if origin and origin in ALLOWED_ORIGINS else "http://localhost:3062"
+    allow_origin = origin if origin and origin in ALLOWED_ORIGINS else globalVar.FRONTEND_ORIGINS[0]
     headers.update(
         {
             "Access-Control-Allow-Origin": allow_origin,
