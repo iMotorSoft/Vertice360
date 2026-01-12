@@ -1,0 +1,24 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import Vertice360WorkflowApp from "../../../lib/vertice360_workflow/ui/Vertice360WorkflowApp.svelte";
+
+const branding = {
+  displayName: "Vertice360 Workflow",
+  logoUrl: "/logo-placeholder.svg",
+  primaryColor: "#0F172A",
+  secondaryColor: "#38BDF8",
+  accentColor: "#F97316",
+};
+---
+
+<BaseLayout brand={branding}>
+  <section class="space-y-2 mb-6">
+    <p class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold">Workflow Demo</p>
+    <h1 class="text-3xl md:text-4xl font-semibold text-slate-900">Inbox operativo con SLA, docs y eventos en vivo</h1>
+    <p class="text-neutral-600 max-w-2xl">
+      Flujo Vertice360 en tiempo real: tickets entrantes, estados, comunicaciones WhatsApp y trazabilidad SSE en un solo tablero.
+    </p>
+  </section>
+
+  <Vertice360WorkflowApp client:load />
+</BaseLayout>

@@ -17,6 +17,7 @@ from backend.modules.messaging.providers.meta.whatsapp.mapper import (
     extract_status_updates,
 )
 from backend.modules.agui_stream import broadcaster
+from backend.modules.vertice360_workflow_demo.services import process_inbound_message
 
 class MessagingController(Controller):
     path = "/api/v1/messaging"
@@ -64,6 +65,18 @@ class DemoMessagingController(Controller):
 
 def _epoch_ms() -> int:
     return int(time.time() * 1000)
+
+
+def _to_epoch_ms(value: str | int | None) -> int:
+    if value is None:
+        return _epoch_ms()
+    try:
+        ts = int(value)
+    except (TypeError, ValueError):
+        return _epoch_ms()
+    if ts < 10**12:
+        ts *= 1000
+    return ts
 
 
 def _custom_event(name: str, value: Dict[str, Any], correlation_id: str | None) -> Dict[str, Any]:
@@ -147,16 +160,56 @@ class MetaWhatsAppWebhookController(Controller):
                     "service": "whatsapp",
                     "wa_id": message.get("wa_id"),
                     "from": message.get("from"),
+                    "to": message.get("to"),
                     "text": message.get("text"),
                     "timestamp": message.get("timestamp"),
                     "message_id": message.get("message_id"),
+                    "media_count": message.get("media_count"),
                     "raw": message.get("raw"),
                 }
             )
             print(f"DEBUG: Broadcasting inbound message from {value.get('from')}")
+            wf_inbound = {
+                "provider": "meta_whatsapp",
+                "channel": "whatsapp",
+                "from": message.get("from") or message.get("wa_id") or "",
+                "to": message.get("to") or "",
+                "messageId": message.get("message_id") or "",
+                "text": message.get("text") or "",
+                "timestamp": _to_epoch_ms(message.get("timestamp")),
+                "mediaCount": message.get("media_count") or 0,
+            }
+            ticket_id = None
+            try:
+                wf_result = await process_inbound_message(wf_inbound)
+                ticket_id = wf_result.get("ticketId")
+            except Exception as exc:  # noqa: BLE001 - best-effort webhook
+                ticket_id = wf_inbound.get("ticketId")
+                print(
+                    "ERROR: workflow demo inbound failed",
+                    {
+                        "message_id": message.get("message_id"),
+                        "from": message.get("from"),
+                        "error": str(exc),
+                    },
+                )
+                error_value = _compact_value(
+                    {
+                        "ticketId": ticket_id,
+                        "messageId": message.get("message_id"),
+                        "from": message.get("from"),
+                        "error": str(exc),
+                    }
+                )
+                correlation_id = ticket_id or "workflow"
+                await broadcaster.publish(
+                    "workflow.error",
+                    _custom_event("workflow.error", error_value, correlation_id),
+                )
+
             await broadcaster.publish(
-                "messaging.inbound",
-                _custom_event("messaging.inbound", value, message.get("message_id")),
+                "messaging.inbound.raw",
+                _custom_event("messaging.inbound.raw", value, message.get("message_id")),
             )
 
         for status in status_updates:

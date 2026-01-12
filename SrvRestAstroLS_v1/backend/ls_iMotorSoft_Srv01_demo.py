@@ -29,6 +29,7 @@ from backend.modules.messaging.webhooks import webhook_router  # noqa: E402
 from backend.telemetry.logging import setup_logging  # noqa: E402
 from backend.middleware.telemetry_middleware import TelemetryMiddleware  # noqa: E402
 from backend.routes.messaging import messaging_router  # noqa: E402
+from routes.demo_vertice360_workflow import router as workflow_demo_router  # noqa: E402
 
 
 def create_app() -> Litestar:
@@ -45,6 +46,7 @@ def create_app() -> Litestar:
         SseTestController,
         webhook_router,
         messaging_router,
+        workflow_demo_router,
     ]
     middleware = [DefineMiddleware(TenantContextMiddleware), DefineMiddleware(TelemetryMiddleware)]
     # Abrimos CORS en modo demo para permitir llamadas desde Astro (dev/preview).

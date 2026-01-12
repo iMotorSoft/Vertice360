@@ -6,17 +6,21 @@ from typing import Any, Iterable
 def extract_inbound_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
     for value in _iter_change_values(payload):
+        metadata = _extract_metadata(value)
         contacts = _extract_contact_wa_ids(value)
         for message in value.get("messages", []) or []:
             if not isinstance(message, dict):
                 continue
             wa_id = message.get("from") or message.get("wa_id") or _first_contact(contacts)
+            to = metadata.get("phone_number_id") or metadata.get("display_phone_number")
             data: dict[str, Any] = {
                 "wa_id": wa_id,
                 "from": message.get("from") or wa_id,
+                "to": to,
                 "text": _extract_text(message),
                 "timestamp": message.get("timestamp"),
                 "message_id": message.get("id"),
+                "media_count": _count_media(message),
             }
             raw = _message_raw(message)
             if raw:
@@ -67,6 +71,11 @@ def _extract_contact_wa_ids(value: dict[str, Any]) -> list[str]:
     return wa_ids
 
 
+def _extract_metadata(value: dict[str, Any]) -> dict[str, Any]:
+    metadata = value.get("metadata")
+    return metadata if isinstance(metadata, dict) else {}
+
+
 def _first_contact(wa_ids: list[str]) -> str | None:
     return wa_ids[0] if wa_ids else None
 
@@ -102,6 +111,14 @@ def _message_raw(message: dict[str, Any]) -> dict[str, Any]:
     if "errors" in message:
         raw["errors"] = message.get("errors")
     return raw
+
+
+def _count_media(message: dict[str, Any]) -> int:
+    media_keys = ("image", "video", "audio", "document", "sticker")
+    count = sum(1 for key in media_keys if key in message)
+    if count == 0 and message.get("type") in media_keys:
+        count = 1
+    return count
 
 
 def _status_raw(status: dict[str, Any]) -> dict[str, Any]:

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import uuid
+
 import httpx
 import globalVar
 
@@ -7,6 +10,9 @@ async def send_message(to: str, text: str) -> dict:
     """
     Sends a WhatsApp text message using the Meta Cloud API.
     """
+    if os.environ.get("DEMO_DISABLE_META_SEND") == "1":
+        message_id = f"demo-{uuid.uuid4().hex}"
+        return {"status": "skipped", "messages": [{"id": message_id}]}
     if not globalVar.meta_whatsapp_enabled():
         return {"error": "Meta WhatsApp not configured (missing env vars)"}
 
