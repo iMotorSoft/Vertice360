@@ -56,4 +56,8 @@ La aplicación se comporta de acuerdo a lo esperado según la lógica de negocio
 *   **Recomendación:** Considerar añadir un indicador visual (toast notification) más explícito al completar una asignación para reforzar la confirmación al usuario, aunque el cambio en el timeline es funcional.
 
 ---
+## 4. Grabación de la Sesión
+![Grabación de Prueba UX](/media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/Vertice360/SrvRestAstroLS_v1/astro/docs/assets/ux_verification_demo.webp)
+
+---
 *Fin del Informe*
