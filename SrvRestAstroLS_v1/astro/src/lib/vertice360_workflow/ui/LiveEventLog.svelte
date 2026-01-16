@@ -16,6 +16,7 @@
 
   const matchesType = (eventName) => {
     if (filters.type === "all") return true;
+    if (eventName === "messaging.inbound.raw") return false;
     return eventName?.startsWith(`${filters.type}.`);
   };
 

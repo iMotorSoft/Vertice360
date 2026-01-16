@@ -4,7 +4,7 @@ import datetime as dt
 import unicodedata
 from typing import Any
 
-from backend.modules.messaging.providers.meta.whatsapp import send_message
+from backend.modules.messaging.providers.meta.whatsapp import MetaWhatsAppSendError, send_text_message
 from backend.modules.vertice360_workflow_demo import events, store
 
 
@@ -119,7 +119,27 @@ def _is_send_error(result: dict[str, Any]) -> bool:
 
 
 async def _send_whatsapp_text(to: str, text: str) -> dict[str, Any]:
-    return await send_message(to, text)
+    return await send_text_message(to, text)
+
+
+async def _emit_outbound_failed(
+    ticket_id: str,
+    provider: str,
+    channel: str,
+    to: str,
+    text: str,
+    error: dict[str, Any],
+) -> None:
+    payload = {
+        "provider": provider,
+        "channel": channel,
+        "to": to,
+        "text": text,
+        "status": "failed",
+        "error": error,
+    }
+    await events.emit_event(events.MESSAGING_OUTBOUND, ticket_id, dict(payload))
+    await store.add_timeline_event(ticket_id, "outbound.failed", payload)
 
 
 async def process_inbound_message(inbound: dict[str, Any]) -> dict[str, Any]:
@@ -168,7 +188,25 @@ async def process_inbound_message(inbound: dict[str, Any]) -> dict[str, Any]:
             actions.append("STATUS_IN_PROGRESS")
 
         reply_text = _build_auto_reply(normalized.get("name"))
-        result = await _send_whatsapp_text(normalized["from"], reply_text)
+        try:
+            result = await _send_whatsapp_text(normalized["from"], reply_text)
+        except MetaWhatsAppSendError as exc:
+            actions.append("OUTBOUND_FAILED")
+            error_payload = {"status_code": exc.status_code, "err": exc.err}
+            await _emit_outbound_failed(
+                ticket_id,
+                normalized["provider"],
+                normalized["channel"],
+                normalized["from"],
+                reply_text,
+                error_payload,
+            )
+            return {
+                "ticketId": ticket_id,
+                "actions": actions,
+                "replyText": reply_text,
+                "status": ticket.get("status"),
+            }
         if _is_send_error(result):
             actions.append("OUTBOUND_FAILED")
             await store.add_timeline_event(
@@ -253,15 +291,35 @@ async def process_inbound_message(inbound: dict[str, Any]) -> dict[str, Any]:
         actions.append("ASSIGNED_ADMIN")
 
         if (ticket.get("status") or "").upper() != "WAITING_DOCS":
+            prev_status = ticket.get("status")
             await store.set_status(ticket_id, "WAITING_DOCS")
-            actions.append("STATUS_WAITING_DOCS")
+            if (ticket.get("status") or "").upper() == "WAITING_DOCS" and ticket.get("status") != prev_status:
+                actions.append("STATUS_WAITING_DOCS")
 
         await events.emit_ticket_sla_started(ticket_id, "ASSIGNMENT", assignment_due_at)
         await events.emit_ticket_sla_started(ticket_id, "DOC_VALIDATION", doc_validation_due_at)
         actions.append("SLA_STARTED")
 
         reply_text = _build_docs_reply()
-        result = await _send_whatsapp_text(normalized["from"], reply_text)
+        try:
+            result = await _send_whatsapp_text(normalized["from"], reply_text)
+        except MetaWhatsAppSendError as exc:
+            actions.append("OUTBOUND_FAILED")
+            error_payload = {"status_code": exc.status_code, "err": exc.err}
+            await _emit_outbound_failed(
+                ticket_id,
+                normalized["provider"],
+                normalized["channel"],
+                normalized["from"],
+                reply_text,
+                error_payload,
+            )
+            return {
+                "ticketId": ticket_id,
+                "actions": actions,
+                "replyText": reply_text,
+                "status": ticket.get("status"),
+            }
         if _is_send_error(result):
             actions.append("OUTBOUND_FAILED")
             await store.add_timeline_event(

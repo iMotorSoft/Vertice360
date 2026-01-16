@@ -32,7 +32,7 @@ def mock_meta_send(monkeypatch):
         calls.append({"to": to, "text": text, "messageId": message_id})
         return {"messages": [{"id": message_id}]}
 
-    monkeypatch.setattr(services, "send_message", fake_send)
+    monkeypatch.setattr(services, "send_text_message", fake_send)
     return calls
 
 

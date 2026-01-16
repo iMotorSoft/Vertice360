@@ -1,5 +1,5 @@
 <script>
-  import { channelLabel, statusLabel, statusTone } from "../types";
+  import { CHANNEL_LABELS, channelLabel, statusLabel, statusTone } from "../types";
   import { formatCountdown, formatRelative } from "../time";
 
   let {
@@ -32,11 +32,23 @@
     return Math.min(...candidates);
   };
 
+  const isInboxTicket = (ticket) => {
+    const id = ticket?.ticketId;
+    if (typeof id === "string" && id.startsWith("VTX-")) return true;
+    const channel = typeof ticket?.channel === "string" ? ticket.channel.toLowerCase() : "";
+    if (channel && CHANNEL_LABELS[channel]) return true;
+    return Boolean(ticket?.provider);
+  };
+
+  const visibleTickets = $derived(
+    (() => tickets.filter((ticket) => isInboxTicket(ticket)))(),
+  );
+
   const filtered = $derived(
     (() => {
       const query = search.trim().toLowerCase();
-      if (!query) return tickets;
-      return tickets.filter((ticket) => {
+      if (!query) return visibleTickets;
+      return visibleTickets.filter((ticket) => {
         const haystack = [
           ticket.ticketId,
           ticket.subject,
@@ -57,7 +69,7 @@
   <div class="flex items-center justify-between gap-3">
     <div>
       <h3 class="text-lg font-semibold text-slate-900">Inbox</h3>
-      <p class="text-xs text-slate-500">{tickets.length} tickets activos</p>
+      <p class="text-xs text-slate-500">{visibleTickets.length} tickets activos</p>
     </div>
     <label
       class="input input-sm input-bordered flex items-center gap-2 rounded-full"

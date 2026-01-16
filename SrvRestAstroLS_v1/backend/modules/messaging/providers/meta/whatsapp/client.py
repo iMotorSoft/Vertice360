@@ -1,15 +1,24 @@
 from __future__ import annotations
 
+import logging
 import os
 import uuid
+from typing import Any
 
 import httpx
 import globalVar
 
-async def send_message(to: str, text: str) -> dict:
-    """
-    Sends a WhatsApp text message using the Meta Cloud API.
-    """
+logger = logging.getLogger(__name__)
+
+
+class MetaWhatsAppSendError(RuntimeError):
+    def __init__(self, status_code: int, err: Any) -> None:
+        super().__init__(f"Meta WhatsApp send failed ({status_code})")
+        self.status_code = status_code
+        self.err = err
+
+
+async def post_message(payload: dict[str, Any], *, client: httpx.AsyncClient | None = None) -> dict[str, Any]:
     if os.environ.get("DEMO_DISABLE_META_SEND") == "1":
         message_id = f"demo-{uuid.uuid4().hex}"
         return {"status": "skipped", "messages": [{"id": message_id}]}
@@ -23,24 +32,32 @@ async def send_message(to: str, text: str) -> dict:
         "Content-Type": "application/json",
     }
     
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "text",
-        "text": {"body": text},
-    }
+    async def _post(http_client: httpx.AsyncClient) -> dict[str, Any]:
+        response = await http_client.post(url, json=payload, headers=headers, timeout=20.0)
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(url, json=payload, headers=headers, timeout=20.0)
-        
-        # Raise for status to handle HTTP errors, or handle manually if preferred.
-        # Here we return the JSON response or the error detail.
-        if response.is_error:
-             # Basic error handling
-            return {
-                "status": "error",
-                "status_code": response.status_code,
-                "response": response.text
-            }
-            
+        if response.status_code >= 400:
+            try:
+                err = response.json()
+            except ValueError:
+                err = {"raw": response.text}
+            logger.error(
+                "Meta WhatsApp send failed phone_number_id=%s to=%s status_code=%s err=%s",
+                globalVar.META_VERTICE360_PHONE_NUMBER_ID,
+                payload.get("to"),
+                response.status_code,
+                err,
+            )
+            raise MetaWhatsAppSendError(response.status_code, err)
+
         return response.json()
+
+    if client is None:
+        async with httpx.AsyncClient() as http_client:
+            return await _post(http_client)
+    return await _post(client)
+
+
+async def send_message(to: str, text: str) -> dict[str, Any]:
+    from .service import send_text_message
+
+    return await send_text_message(to, text)

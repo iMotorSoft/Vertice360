@@ -127,7 +127,7 @@ class WorkflowTicketsController(Controller):
         ticket = _get_ticket_or_404(ticket_id)
         await store.assign_ticket(ticket_id, {"team": data["team"], "name": data["name"]})
         if (ticket.get("status") or "").upper() == "OPEN":
-            await store.set_status(ticket_id, "IN_PROGRESS")
+            await store.set_status(ticket_id, "IN_PROGRESS", actor="agent")
         return _ticket_detail(ticket)
 
     @post("/{ticket_id:str}/status")
@@ -137,7 +137,7 @@ class WorkflowTicketsController(Controller):
         if status not in ALLOWED_STATUSES:
             raise HTTPException(status_code=400, detail="Invalid status")
         ticket = _get_ticket_or_404(ticket_id)
-        await store.set_status(ticket_id, status)
+        await store.set_status(ticket_id, status, actor="agent")
         return _ticket_detail(ticket)
 
     @post("/{ticket_id:str}/docs")
@@ -148,43 +148,28 @@ class WorkflowTicketsController(Controller):
             raise HTTPException(status_code=400, detail="Invalid docs action")
 
         ticket = _get_ticket_or_404(ticket_id)
-        prev_status = ticket.get("status")
         patch: dict[str, Any] = {}
+        target_status = ticket.get("status") or "OPEN"
 
         if action == "REQUEST":
             requested = data.get("requestedDocs") or []
             if not isinstance(requested, list) or not requested:
                 raise HTTPException(status_code=400, detail="requestedDocs must be a non-empty list")
-            ticket["requestedDocs"] = list(requested)
-            ticket["docsReceivedAt"] = None
-            patch["requestedDocs"] = ticket["requestedDocs"]
+            patch["requestedDocs"] = list(requested)
             patch["docsReceivedAt"] = None
-            ticket["status"] = "WAITING_DOCS"
-            patch["status"] = ticket["status"]
+            target_status = "WAITING_DOCS"
 
         if action == "RECEIVE":
             received_at = _epoch_ms()
-            ticket["docsReceivedAt"] = received_at
             patch["docsReceivedAt"] = received_at
             if (ticket.get("status") or "").upper() == "WAITING_DOCS":
-                ticket["status"] = "IN_PROGRESS"
-                patch["status"] = ticket["status"]
+                target_status = "IN_PROGRESS"
 
         if action == "CLEAR":
-            ticket["requestedDocs"] = []
-            ticket["docsReceivedAt"] = None
             patch["requestedDocs"] = []
             patch["docsReceivedAt"] = None
 
-        store.touch_ticket(ticket_id)
-        _append_timeline_event(ticket, events.TICKET_UPDATED, {"patch": patch})
-        await events.emit_ticket_updated(
-            ticket_id,
-            prev_status,
-            ticket.get("status"),
-            patch,
-            actor="agent",
-        )
+        await store.set_status(ticket_id, target_status, actor="agent", patch=patch)
         return _ticket_detail(ticket)
 
     @post("/{ticket_id:str}/close")
@@ -199,11 +184,19 @@ class WorkflowTicketsController(Controller):
         _ensure_payload_keys(data, ["reason", "toTeam"])
         ticket = _get_ticket_or_404(ticket_id)
         prev_status = ticket.get("status")
-        ticket["status"] = "ESCALATED"
-        store.touch_ticket(ticket_id)
-        patch = {"status": ticket["status"]}
-        _append_timeline_event(ticket, events.TICKET_UPDATED, {"patch": patch})
-        await events.emit_ticket_updated(ticket_id, prev_status, ticket["status"], patch, actor="agent")
+        escalation = ticket.get("escalation") or {}
+        if prev_status == "ESCALATED" and escalation.get("toTeam") == data["toTeam"]:
+            return _ticket_detail(ticket)
+
+        now_ms = _epoch_ms()
+        if escalation.get("toTeam") != data["toTeam"] or escalation.get("reason") != data["reason"]:
+            ticket["escalation"] = {"toTeam": data["toTeam"], "reason": data["reason"], "at": now_ms}
+
+        if prev_status != "ESCALATED":
+            await store.set_status(ticket_id, "ESCALATED", actor="agent")
+        else:
+            store.touch_ticket(ticket_id)
+
         await events.emit_ticket_escalated(ticket_id, data["reason"], data["toTeam"])
         return _ticket_detail(ticket)
 
@@ -216,12 +209,19 @@ class WorkflowTicketsController(Controller):
 
         ticket = _get_ticket_or_404(ticket_id)
         prev_status = ticket.get("status")
-        
+
         sla = ticket.get("sla")
         if sla is None:
             sla = {}
             ticket["sla"] = sla
-            
+
+        if sla_type == "ASSIGNMENT":
+            if sla.get("assignmentBreachedAt") is not None:
+                return {"ok": True, "alreadyBreached": True, "ticket": _ticket_detail(ticket)}
+        else:
+            if sla.get("docValidationBreachedAt") is not None:
+                return {"ok": True, "alreadyBreached": True, "ticket": _ticket_detail(ticket)}
+
         now_ms = _epoch_ms()
         patch: dict[str, Any] = {}
 
@@ -234,14 +234,24 @@ class WorkflowTicketsController(Controller):
             patch["sla"] = {"docValidationBreachedAt": now_ms}
             due_at = sla.get("docValidationDueAt")
 
-        ticket["status"] = "ESCALATED"
-        patch["status"] = ticket["status"]
+        if ticket.get("status") != "ESCALATED":
+            ticket["status"] = "ESCALATED"
+            patch["status"] = ticket["status"]
+
+        escalation = ticket.get("escalation") or {}
+        should_emit_escalated = (
+            escalation.get("toTeam") != "SUPERVISOR" or escalation.get("reason") != "SLA_BREACH"
+        )
+        if should_emit_escalated:
+            ticket["escalation"] = {"toTeam": "SUPERVISOR", "reason": "SLA_BREACH", "at": now_ms}
+
         store.touch_ticket(ticket_id)
         _append_timeline_event(ticket, events.TICKET_UPDATED, {"patch": patch})
 
         await events.emit_ticket_sla_breached(ticket_id, sla_type, due_at, now_ms)
-        await events.emit_ticket_escalated(ticket_id, "SLA_BREACH", "SUPERVISOR")
-        await events.emit_ticket_updated(ticket_id, prev_status, ticket["status"], patch, actor="system")
+        if should_emit_escalated:
+            await events.emit_ticket_escalated(ticket_id, "SLA_BREACH", "SUPERVISOR")
+        await events.emit_ticket_updated(ticket_id, prev_status, ticket.get("status"), patch, actor="system")
         return _ticket_detail(ticket)
 
 

@@ -11,7 +11,7 @@ from litestar.response import Response
 from litestar.enums import MediaType
 
 import globalVar
-from backend.modules.messaging.providers.meta.whatsapp import send_message
+from backend.modules.messaging.providers.meta.whatsapp import MetaWhatsAppSendError, send_text_message
 from backend.modules.messaging.providers.meta.whatsapp.mapper import (
     extract_inbound_messages,
     extract_status_updates,
@@ -45,7 +45,12 @@ class DemoMessagingController(Controller):
             return {"error": "Missing 'to' or 'text' in body"}
 
         # 1. Send via Provider
-        result = await send_message(to, text)
+        try:
+            result = await send_text_message(to, text)
+        except MetaWhatsAppSendError as exc:
+            result = {"status": "error", "status_code": exc.status_code, "response": exc.err}
+        except ValueError as exc:
+            result = {"status": "error", "response": str(exc)}
         
         # 2. Broadcast event to AG-UI stream (if success or attempt)
         # We broadcast the result so the frontend can show it.

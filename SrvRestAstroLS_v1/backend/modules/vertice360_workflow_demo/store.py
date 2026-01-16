@@ -9,6 +9,7 @@ from backend.modules.vertice360_workflow_demo import events
 
 _ticket_sequence = itertools.count(1)
 tickets: dict[str, dict[str, Any]] = {}
+TIMELINE_DEDUPE_WINDOW_MS = 2000
 
 
 def _epoch_ms() -> int:
@@ -21,9 +22,13 @@ def _normalize_requested_docs(requested_docs: list[str] | None) -> list[str]:
     return list(requested_docs)
 
 
-def _build_timeline_event(name: str, value: dict[str, Any] | None) -> dict[str, Any]:
+def _build_timeline_event(
+    name: str,
+    value: dict[str, Any] | None,
+    timestamp_ms: int | None = None,
+) -> dict[str, Any]:
     return {
-        "timestamp": _epoch_ms(),
+        "timestamp": _epoch_ms() if timestamp_ms is None else timestamp_ms,
         "name": name,
         "value": value or {},
     }
@@ -31,6 +36,39 @@ def _build_timeline_event(name: str, value: dict[str, Any] | None) -> dict[str, 
 
 def _touch(ticket: dict[str, Any]) -> None:
     ticket["updatedAt"] = _epoch_ms()
+
+
+def _is_duplicate_timeline_event(
+    last_event: dict[str, Any] | None,
+    name: str,
+    value: dict[str, Any] | None,
+    now_ms: int,
+) -> bool:
+    if not last_event:
+        return False
+    if last_event.get("name") != name:
+        return False
+    if (last_event.get("value") or {}) != (value or {}):
+        return False
+    last_ts = last_event.get("timestamp")
+    if not isinstance(last_ts, int):
+        return False
+    return now_ms - last_ts <= TIMELINE_DEDUPE_WINDOW_MS
+
+
+def _append_timeline_event(
+    ticket: dict[str, Any],
+    name: str,
+    value: dict[str, Any] | None,
+) -> tuple[dict[str, Any], bool]:
+    timeline = ticket.setdefault("timeline", [])
+    now_ms = _epoch_ms()
+    last_event = timeline[-1] if timeline else None
+    if _is_duplicate_timeline_event(last_event, name, value, now_ms):
+        return last_event, False
+    timeline_event = _build_timeline_event(name, value, now_ms)
+    timeline.append(timeline_event)
+    return timeline_event, True
 
 
 def generate_ticket_id() -> str:
@@ -79,15 +117,15 @@ async def create_or_get_ticket_from_inbound(inbound: dict[str, Any]) -> dict[str
         next_status = ticket.get("status")
         if patch:
             _touch(ticket)
-            timeline_event = _build_timeline_event(events.TICKET_UPDATED, {"patch": patch})
-            ticket["timeline"].append(timeline_event)
-            await events.emit_ticket_updated(
-                ticket_id,
-                prev_status,
-                next_status,
-                patch,
-                actor="inbound",
-            )
+            _, appended = _append_timeline_event(ticket, events.TICKET_UPDATED, {"patch": patch})
+            if appended:
+                await events.emit_ticket_updated(
+                    ticket_id,
+                    prev_status,
+                    next_status,
+                    patch,
+                    actor="inbound",
+                )
         return ticket
 
     if not ticket_id:
@@ -109,8 +147,7 @@ async def create_or_get_ticket_from_inbound(inbound: dict[str, Any]) -> dict[str
         "createdAt": now_ms,
         "updatedAt": now_ms,
     }
-    timeline_event = _build_timeline_event(events.TICKET_CREATED, inbound)
-    ticket["timeline"].append(timeline_event)
+    _append_timeline_event(ticket, events.TICKET_CREATED, inbound)
     tickets[ticket_id] = ticket
     await events.emit_ticket_created(ticket)
     return ticket
@@ -120,36 +157,79 @@ async def assign_ticket(ticket_id: str, assignee: Any) -> dict[str, Any]:
     ticket = tickets.get(ticket_id)
     if not ticket:
         raise KeyError("ticket not found")
+    if ticket.get("assignee") == assignee:
+        return ticket
     ticket["assignee"] = assignee
     _touch(ticket)
     assignment_due_at = None
     if isinstance(ticket.get("sla"), dict):
         assignment_due_at = ticket["sla"].get("assignmentDueAt") or ticket["sla"].get("dueAt")
-    timeline_event = _build_timeline_event(
+    _, appended = _append_timeline_event(
+        ticket,
         events.TICKET_ASSIGNED,
         {"assignee": assignee, "dueAt": assignment_due_at},
     )
-    ticket["timeline"].append(timeline_event)
-    await events.emit_ticket_assigned(ticket_id, assignee, assignment_due_at)
+    if appended:
+        await events.emit_ticket_assigned(ticket_id, assignee, assignment_due_at)
     return ticket
 
 
-async def set_status(ticket_id: str, status: str) -> dict[str, Any]:
+async def set_status(
+    ticket_id: str,
+    status: str,
+    actor: str | None = "system",
+    patch: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     ticket = tickets.get(ticket_id)
     if not ticket:
         raise KeyError("ticket not found")
     prev_status = ticket.get("status")
-    ticket["status"] = status
+    patch_payload: dict[str, Any] = {}
+    changed = False
+
+    if patch:
+        for key, value in patch.items():
+            if key == "status":
+                continue
+            if key == "requestedDocs":
+                value = _normalize_requested_docs(value)
+            if key == "sla" and isinstance(value, dict):
+                current = ticket.get("sla") or {}
+                merged = {**current, **value}
+                if merged != current:
+                    ticket["sla"] = merged
+                    patch_payload["sla"] = value
+                    changed = True
+                continue
+            if ticket.get(key) != value:
+                ticket[key] = value
+                patch_payload[key] = value
+                changed = True
+
+    status_changed = prev_status != status
+    blocked_transition = prev_status == "ESCALATED" and status == "WAITING_DOCS"
+    if status_changed and not blocked_transition:
+        ticket["status"] = status
+        patch_payload["status"] = status
+        changed = True
+
+    if not changed:
+        return ticket
+
     _touch(ticket)
-    timeline_event = _build_timeline_event(events.TICKET_UPDATED, {"status": status})
-    ticket["timeline"].append(timeline_event)
-    await events.emit_ticket_updated(
-        ticket_id,
-        prev_status,
-        status,
-        {"status": status},
-        actor="system",
+    _, appended = _append_timeline_event(
+        ticket,
+        events.TICKET_UPDATED,
+        {"patch": patch_payload},
     )
+    if appended:
+        await events.emit_ticket_updated(
+            ticket_id,
+            prev_status,
+            ticket.get("status"),
+            patch_payload,
+            actor=actor,
+        )
     return ticket
 
 
@@ -157,10 +237,10 @@ async def add_timeline_event(ticket_id: str, name: str, value: dict[str, Any] | 
     ticket = tickets.get(ticket_id)
     if not ticket:
         raise KeyError("ticket not found")
-    timeline_event = _build_timeline_event(name, value)
-    ticket["timeline"].append(timeline_event)
-    _touch(ticket)
-    await events.emit_event(name, ticket_id, {"timeline": timeline_event})
+    timeline_event, appended = _append_timeline_event(ticket, name, value)
+    if appended:
+        _touch(ticket)
+        await events.emit_event(name, ticket_id, {"timeline": timeline_event})
     return timeline_event
 
 
@@ -171,9 +251,9 @@ async def close_ticket(ticket_id: str, reason: str | None = None) -> dict[str, A
     ticket["status"] = "CLOSED"
     _touch(ticket)
     timeline_value = {"reason": reason} if reason else {}
-    timeline_event = _build_timeline_event(events.TICKET_CLOSED, timeline_value)
-    ticket["timeline"].append(timeline_event)
-    await events.emit_ticket_closed(ticket_id, reason)
+    _, appended = _append_timeline_event(ticket, events.TICKET_CLOSED, timeline_value)
+    if appended:
+        await events.emit_ticket_closed(ticket_id, reason)
     return ticket
 
 

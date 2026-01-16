@@ -3,6 +3,29 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 
+def normalize_wa_to(to: str) -> str:
+    normalized = str(to or "").strip()
+    if normalized.startswith("+"):
+        normalized = normalized[1:]
+    normalized = normalized.replace(" ", "").replace("-", "")
+    if not normalized.isdigit():
+        raise ValueError("WhatsApp 'to' must contain only digits")
+    return normalized
+
+
+def waid_to_graph_to(wa_id: str) -> str:
+    """Map a WhatsApp wa_id to the Graph API "to" format.
+
+    In Argentina test/allowlist mode, inbound wa_ids often include an extra
+    mobile "9" after the country code (e.g., 549...), but Graph expects 54....
+    This helper normalizes the input and drops that "9" when present.
+    """
+    normalized = normalize_wa_to(wa_id)
+    if normalized.startswith("549"):
+        return f"54{normalized[3:]}"
+    return normalized
+
+
 def extract_inbound_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
     for value in _iter_change_values(payload):

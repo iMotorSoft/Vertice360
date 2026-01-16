@@ -57,6 +57,12 @@ const normalizeEvent = (evt) => {
   };
 };
 
+const getEventTicketId = (evt) => {
+  const ticketId = evt?.value?.ticketId;
+  if (typeof ticketId === "string" && ticketId.trim()) return ticketId;
+  return null;
+};
+
 export function createWorkflowState() {
   let ticketsById = $state({});
   let ticketOrder = $state([]);
@@ -359,8 +365,12 @@ export function createWorkflowState() {
       handleWorkflowEvent(evt);
     }
 
-    if (!evt.correlationId || evt.correlationId === "workflow") return;
-    const ticketId = evt.correlationId;
+    if (evt.name === "messaging.inbound.raw") {
+      return;
+    }
+
+    const ticketId = getEventTicketId(evt);
+    if (!ticketId) return;
     lastEventByTicket = { ...lastEventByTicket, [ticketId]: evt.timestamp };
     touchTicket(ticketId, evt.timestamp);
 
