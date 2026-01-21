@@ -1,0 +1,24 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import Vertice360AiWorkflowStudioApp from "../../../lib/vertice360_ai_workflow_studio/ui/Vertice360AiWorkflowStudioApp.svelte";
+
+const branding = {
+  displayName: "Vertice360 AI Workflow Studio",
+  logoUrl: "/logo-placeholder.svg",
+  primaryColor: "#0F172A",
+  secondaryColor: "#FBBF24",
+  accentColor: "#14B8A6",
+};
+---
+
+<BaseLayout brand={branding}>
+  <section class="space-y-2 mb-6">
+    <p class="text-xs uppercase tracking-[0.3em] text-slate-500 font-semibold">AI Workflow Demo</p>
+    <h1 class="text-3xl md:text-4xl font-semibold text-slate-900">UX Studio para orquestar workflows deterministas</h1>
+    <p class="text-neutral-600 max-w-2xl">
+      Una vista clara para correr flujos, inspeccionar estados y ver eventos SSE en tiempo real.
+    </p>
+  </section>
+
+  <Vertice360AiWorkflowStudioApp client:load />
+</BaseLayout>

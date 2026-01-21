@@ -9,9 +9,9 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "@astrojs/svelte": "^7.2.4",
+    "@astrojs/svelte": "^7.2.5",
     "@types/node": "^20.11.19",
-    "astro": "^5.16.6",
+    "astro": "^5.16.11",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.38",
     "svelte": "^5.0.0",

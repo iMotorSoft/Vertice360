@@ -17,6 +17,7 @@ from backend.modules.messaging.providers.meta.whatsapp.mapper import (
     extract_status_updates,
 )
 from backend.modules.agui_stream import broadcaster
+from backend.modules.vertice360_ai_workflow_demo.bridge import maybe_start_ai_workflow_from_inbound
 from backend.modules.vertice360_workflow_demo.services import process_inbound_message
 
 class MessagingController(Controller):
@@ -154,6 +155,13 @@ class MetaWhatsAppWebhookController(Controller):
 
         inbound_messages = extract_inbound_messages(payload)
         status_updates = extract_status_updates(payload)
+
+        tenant_ctx = {
+            "tenant_id": request.scope.get("tenant_id"),
+            "tenant_host": request.scope.get("tenant_host"),
+        }
+        if not tenant_ctx["tenant_id"] and not tenant_ctx["tenant_host"]:
+            tenant_ctx = None
         
         print(f"DEBUG: Inbound messages found: {len(inbound_messages)}")
         print(f"DEBUG: Status updates found: {len(status_updates)}")
@@ -186,6 +194,9 @@ class MetaWhatsAppWebhookController(Controller):
             }
             ticket_id = None
             try:
+                ai_result = await maybe_start_ai_workflow_from_inbound(message, broadcaster, tenant_ctx)
+                if ai_result and ai_result.get("responseText"):
+                    wf_inbound["aiResponseText"] = ai_result["responseText"]
                 wf_result = await process_inbound_message(wf_inbound)
                 ticket_id = wf_result.get("ticketId")
             except Exception as exc:  # noqa: BLE001 - best-effort webhook

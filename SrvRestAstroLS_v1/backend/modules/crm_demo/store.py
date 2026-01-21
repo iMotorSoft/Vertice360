@@ -73,7 +73,7 @@ def _iso(dt_value: dt.datetime) -> str:
 
 
 def _ts_now() -> str:
-    return _iso(dt.datetime.utcnow())
+    return _iso(dt.datetime.now(dt.UTC))
 
 
 def _uuid() -> str:
@@ -124,7 +124,7 @@ class CRMStore:
                     conversation_id=conv_a.id,
                     sender="lead",
                     text="Hola, me interesa el depto de 2 ambientes en Caballito.",
-                    ts=_iso(dt.datetime.utcnow() - dt.timedelta(minutes=15)),
+                    ts=_iso(dt.datetime.now(dt.UTC) - dt.timedelta(minutes=15)),
                     status="read",
                 ),
                 Message(
@@ -132,7 +132,7 @@ class CRMStore:
                     conversation_id=conv_a.id,
                     sender="agent",
                     text="Hola Maria! Claro, tenes disponibilidad para una visita virtual manana?",
-                    ts=_iso(dt.datetime.utcnow() - dt.timedelta(minutes=12)),
+                    ts=_iso(dt.datetime.now(dt.UTC) - dt.timedelta(minutes=12)),
                     status="delivered",
                 ),
             ]
@@ -152,14 +152,14 @@ class CRMStore:
                     conversation_id=conv_b.id,
                     sender="lead",
                     text="Hola, ofrecen financiacion para el proyecto Vertice360?",
-                    ts=_iso(dt.datetime.utcnow() - dt.timedelta(hours=2)),
+                    ts=_iso(dt.datetime.now(dt.UTC) - dt.timedelta(hours=2)),
                 ),
                 Message(
                     id="msg-4",
                     conversation_id=conv_b.id,
                     sender="agent",
                     text="Hola Carlos! Si, contamos con un plan de financiacion en 24 cuotas.",
-                    ts=_iso(dt.datetime.utcnow() - dt.timedelta(hours=1, minutes=55)),
+                    ts=_iso(dt.datetime.now(dt.UTC) - dt.timedelta(hours=1, minutes=55)),
                 ),
             ]
         )
@@ -186,14 +186,14 @@ class CRMStore:
             title="Enviar brochure Vertice360",
             lead_id=lead_a.id,
             deal_id=deal_a.id,
-            due_at=_iso(dt.datetime.utcnow() + dt.timedelta(hours=4)),
+            due_at=_iso(dt.datetime.now(dt.UTC) + dt.timedelta(hours=4)),
         )
         task_b = Task(
             id="task-7002",
             title="Coordinar visita virtual",
             lead_id=lead_a.id,
             deal_id=deal_a.id,
-            due_at=_iso(dt.datetime.utcnow() + dt.timedelta(days=1)),
+            due_at=_iso(dt.datetime.now(dt.UTC) + dt.timedelta(days=1)),
         )
 
         self.leads = {lead_a.id: lead_a, lead_b.id: lead_b}

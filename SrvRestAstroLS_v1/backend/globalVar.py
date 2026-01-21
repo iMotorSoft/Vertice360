@@ -81,6 +81,8 @@ ROLES: tuple[str, ...] = ("ADMIN", "OPERATOR", "AUDITOR", "VIEWER")
 # Features / Rules
 # =========================
 FEATURE_AI: bool = False
+VERTICE360_AI_WORKFLOW_REPLY: bool = True
+VERTICE360_AI_WORKFLOW_REPLY_PREVIEW_MAX: int = 240
 DEFAULT_DATE_WINDOW_DAYS: int = 3
 DEFAULT_ROUNDING_DECIMALS: int = 2
 
@@ -185,6 +187,7 @@ def boot_log() -> None:
     print(f"[{APP_NAME}] storage_provider={STORAGE_PROVIDER} local_root={STORAGE_LOCAL_ROOT}")
     print(f"[{APP_NAME}] data_root={DATA_ROOT}")
     print(f"[{APP_NAME}] rules_dir={RULES_DIR}")
+    print(f"[{APP_NAME}] ai_workflow_reply={VERTICE360_AI_WORKFLOW_REPLY}")
     print(f"[{APP_NAME}] mlflow={MLFLOW_TRACKING_URI}")
     print(f"[{APP_NAME}] openai_key={mask(OpenAI_Key)} model={OpenAI_Model}")
     print(f"[{APP_NAME}] meta_phone_id={META_VERTICE360_PHONE_NUMBER_ID} meta_graph={META_GRAPH_VERSION}")
