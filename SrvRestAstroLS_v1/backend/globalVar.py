@@ -123,6 +123,25 @@ META_VERTICE360_VERIFY_TOKEN: str = os.environ.get("META_VERTICE360_VERIFY_TOKEN
 META_APP_SECRET_IMOTORSOFT: str = os.environ.get("META_APP_SECRET_IMOTORSOFT", "")
 META_GRAPH_VERSION: str = os.environ.get("META_GRAPH_VERSION", "v20.0")
 
+# =========================
+# Messaging / Gupshup WhatsApp (Vertice360)
+# =========================
+DEFAULT_GUPSHUP_BASE_URL: str = "https://api.gupshup.io"
+GUPSHUP_APP_NAME_DEV: str = os.environ.get("GUPSHUP_APP_NAME_DEV", "")
+GUPSHUP_APP_NAME_PRO: str = os.environ.get("GUPSHUP_APP_NAME_PRO", GUPSHUP_APP_NAME_DEV)
+GUPSHUP_API_KEY_DEV: str = os.environ.get("GUPSHUP_API_KEY_DEV", "")
+GUPSHUP_API_KEY_PRO: str = os.environ.get("GUPSHUP_API_KEY_PRO", GUPSHUP_API_KEY_DEV)
+GUPSHUP_SRC_NUMBER_DEV: str = os.environ.get("GUPSHUP_SRC_NUMBER_DEV", "")
+GUPSHUP_SRC_NUMBER_PRO: str = os.environ.get("GUPSHUP_SRC_NUMBER_PRO", GUPSHUP_SRC_NUMBER_DEV)
+GUPSHUP_BASE_URL_DEV: str = os.environ.get("GUPSHUP_BASE_URL_DEV", DEFAULT_GUPSHUP_BASE_URL)
+GUPSHUP_BASE_URL_PRO: str = os.environ.get("GUPSHUP_BASE_URL_PRO", GUPSHUP_BASE_URL_DEV)
+
+# Seleccion manual DEV/PRO → FINAL
+GUPSHUP_APP_NAME: str = GUPSHUP_APP_NAME_DEV
+GUPSHUP_API_KEY: str = GUPSHUP_API_KEY_DEV
+GUPSHUP_SRC_NUMBER: str = GUPSHUP_SRC_NUMBER_DEV
+GUPSHUP_BASE_URL: str = GUPSHUP_BASE_URL_DEV
+
 
 # =========================
 # Helpers
@@ -179,6 +198,9 @@ def meta_whatsapp_enabled() -> bool:
         and META_VERTICE360_PHONE_NUMBER_ID
         and META_VERTICE360_VERIFY_TOKEN
     )
+
+def gupshup_whatsapp_enabled() -> bool:
+    return bool(GUPSHUP_APP_NAME and GUPSHUP_API_KEY and GUPSHUP_SRC_NUMBER)
 
 def boot_log() -> None:
     print(f"[{APP_NAME}] version={APP_VERSION} env={RUN_ENV} debug={DEBUG} log={LOG_LEVEL}")
