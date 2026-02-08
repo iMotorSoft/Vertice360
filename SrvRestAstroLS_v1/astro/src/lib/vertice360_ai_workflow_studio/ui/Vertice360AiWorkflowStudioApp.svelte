@@ -115,6 +115,7 @@
           activeNodeId={studio.activeNodeId}
           activeRunId={studio.activeRunId}
           stepsByNodeId={studio.stepsByNodeId}
+          activeOutput={studio.activeOutput}
         />
 
         <RunHistory

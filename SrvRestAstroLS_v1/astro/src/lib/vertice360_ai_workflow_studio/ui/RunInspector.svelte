@@ -9,20 +9,99 @@
   let sending = $state(false);
   let sendError = $state("");
   let copied = $state(false);
+  let nbqCopied = $state(false);
 
   const output = $derived(run?.output || {});
   const pragmatics = $derived(output?.pragmatics || {});
   const missingSlots = $derived(pragmatics?.missingSlots || {});
-  const missingSlotsCount = $derived(
+  const missingSlotsCountComputed = $derived(
     Object.values(missingSlots || {}).reduce((total, slots) => {
       if (Array.isArray(slots)) return total + slots.length;
       return total;
     }, 0),
   );
+  const missingSlotsCount = $derived(
+    pragmatics?.missingSlotsCount ?? output?.missingSlotsCount ?? missingSlotsCountComputed,
+  );
   const secondaryIntents = $derived(formatList(output?.secondaryIntents));
   const entities = $derived(output?.entities || {});
   const responseText = $derived(
     output?.responseText || output?.response_text || "",
+  );
+  const decision = $derived(output?.decision || "");
+  const visitSource = $derived(output?.visit || output?.commercial?.visit || null);
+  const visitPreference = $derived.by(() => {
+    if (!visitSource) return null;
+    if (typeof visitSource === "string") {
+      return { day: "", timeWindow: "", rawText: visitSource.trim() };
+    }
+    const day = firstNonEmptyString(
+      visitSource?.day,
+      visitSource?.dayOfWeek,
+      visitSource?.day_of_week,
+      visitSource?.date,
+      visitSource?.date_range,
+      visitSource?.dateRange,
+      visitSource?.fecha,
+      visitSource?.dia,
+    );
+    const timeWindow = firstNonEmptyString(
+      visitSource?.timeWindow,
+      visitSource?.time_window,
+      visitSource?.timeRange,
+      visitSource?.time_range,
+      visitSource?.window,
+      visitSource?.franja,
+      visitSource?.horario,
+      visitSource?.hora,
+    );
+    const rawText = firstNonEmptyString(
+      visitSource?.rawText,
+      visitSource?.raw_text,
+      visitSource?.raw,
+      visitSource?.text,
+      visitSource?.value,
+      visitSource?.utterance,
+    );
+    return { day, timeWindow, rawText };
+  });
+  const showVisitPreference = $derived(Boolean(visitSource));
+  const nextActionQuestion = $derived.by(() => {
+    const direct = output?.nextActionQuestion ?? output?.next_action_question;
+    if (typeof direct === "string" && direct.trim()) return direct.trim();
+    const nextAction = output?.next_action ?? output?.nextAction;
+    if (typeof nextAction === "string" && nextAction.trim()) return nextAction.trim();
+    if (nextAction && typeof nextAction === "object") {
+      const question = nextAction?.question;
+      if (typeof question === "string" && question.trim()) return question.trim();
+    }
+    return "";
+  });
+  const visitActionQuestion = $derived.by(() => {
+    if (decision !== "confirm_visit_request") return "";
+    const direct = firstNonEmptyString(
+      nextActionQuestion,
+      output?.next_question,
+      output?.nextQuestion,
+    );
+    if (direct) return direct;
+    if (isQuestionText(responseText)) return responseText.trim();
+    return "";
+  });
+
+  const nextBestQuestion = $derived.by(() => {
+    const direct = output?.recommendedQuestion;
+    if (direct) return direct;
+    const fromPragmatics = pragmatics?.recommendedQuestion;
+    if (fromPragmatics) return fromPragmatics;
+    if (decision === "ask_next_best_question") {
+      const candidate = output?.responseText;
+      if (isQuestionText(candidate)) return candidate.trim();
+    }
+    return "";
+  });
+  const showNextBestQuestion = $derived(
+    Boolean(nextBestQuestion) || decision === "ask_next_best_question",
   );
 
   const lastMessage = $derived.by(() => {
@@ -67,6 +146,17 @@
     }
   };
 
+  const handleCopyNextBestQuestion = async () => {
+    if (!nextBestQuestion.trim()) return;
+    try {
+      await navigator.clipboard.writeText(nextBestQuestion.trim());
+      nbqCopied = true;
+      setTimeout(() => (nbqCopied = false), 1200);
+    } catch (err) {
+      nbqCopied = false;
+    }
+  };
+
   const toggleEdit = () => {
     editing = !editing;
     if (editing) {
@@ -94,6 +184,22 @@
   function formatList(value) {
     if (!value) return [];
     return Array.isArray(value) ? value : [value];
+  }
+
+  function isQuestionText(value) {
+    if (!value || typeof value !== "string") return false;
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length > 140) return false;
+    return trimmed.endsWith("?") || trimmed.startsWith("¿");
+  }
+
+  function firstNonEmptyString(...values) {
+    for (const value of values) {
+      if (typeof value !== "string") continue;
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
+    }
+    return "";
   }
 </script>
 
@@ -237,6 +343,94 @@
             </div>
           </div>
         </div>
+
+        {#if showVisitPreference}
+          <div class="rounded-2xl border border-base-200 p-4 min-w-0">
+            <p class="text-xs uppercase tracking-[0.2em] text-slate-500">
+              Visit preference
+            </p>
+            <div class="mt-2 grid gap-2 text-sm min-w-0">
+              <div class="flex flex-wrap items-center gap-2 min-w-0">
+                <span class="badge badge-outline badge-sm">Day</span>
+                <span class="min-w-0 break-words text-slate-700">
+                  {visitPreference?.day || "--"}
+                </span>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 min-w-0">
+                <span class="badge badge-outline badge-sm">Time window</span>
+                <span class="min-w-0 break-words text-slate-700">
+                  {visitPreference?.timeWindow || "--"}
+                </span>
+              </div>
+              <div class="flex flex-wrap items-start gap-2 min-w-0">
+                <span class="badge badge-ghost badge-sm">Raw</span>
+                <span
+                  class="min-w-0 break-words whitespace-pre-wrap text-slate-600"
+                >
+                  {visitPreference?.rawText || "--"}
+                </span>
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        {#if decision === "confirm_visit_request"}
+          <div
+            class="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 min-w-0"
+          >
+            <div
+              class="flex flex-wrap items-center justify-between gap-2 min-w-0"
+            >
+              <p
+                class="text-xs uppercase tracking-[0.2em] text-emerald-700"
+              >
+                Next action
+              </p>
+              <span
+                class="badge badge-sm border-emerald-200 bg-emerald-100 text-emerald-700"
+              >
+                Visit captured
+              </span>
+            </div>
+            <p
+              class="mt-3 text-base md:text-lg font-semibold text-emerald-900 break-words whitespace-pre-wrap min-w-0"
+            >
+              {visitActionQuestion || "--"}
+            </p>
+          </div>
+        {/if}
+
+        {#if showNextBestQuestion}
+          <div class="rounded-2xl border border-base-200 p-4 min-w-0">
+            <div class="flex flex-wrap items-center justify-between gap-2 min-w-0">
+              <p class="text-xs uppercase tracking-[0.2em] text-slate-500">
+                Next best question
+              </p>
+              <div class="flex flex-wrap items-center gap-2 min-w-0">
+                {#if decision === "ask_next_best_question"}
+                  <span class="badge badge-warning badge-sm">Needs info</span>
+                {/if}
+                <span class="badge badge-outline badge-sm text-xs">
+                  Missing slots: {missingSlotsCount ?? 0}
+                </span>
+              </div>
+            </div>
+            <div class="mt-3 flex items-start justify-between gap-3 min-w-0">
+              <div
+                class="max-w-full overflow-hidden rounded-2xl bg-base-200 px-4 py-3 text-sm text-slate-900 whitespace-pre-wrap break-words"
+              >
+                {nextBestQuestion || "No question generated yet."}
+              </div>
+              <button
+                class="btn btn-ghost btn-xs"
+                onclick={handleCopyNextBestQuestion}
+                disabled={!nextBestQuestion.trim()}
+              >
+                {nbqCopied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </div>
+        {/if}
 
         <div class="rounded-2xl border border-base-200 p-4 min-w-0">
           <p class="text-xs uppercase tracking-[0.2em] text-slate-500">

@@ -27,3 +27,6 @@ dev-dependencies = []
 [tool.hatch.build.targets.wheel]
 packages = ["modules", "routes", "models", "services", "middleware", "db"]
 include = ["globalVar.py", "ls_iMotorSoft_Srv01.py"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

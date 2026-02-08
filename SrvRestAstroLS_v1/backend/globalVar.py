@@ -35,6 +35,15 @@ FRONTEND_ORIGINS: list[str] = [
     os.environ.get("VERTICE360_FE_URL_IP", "http://127.0.0.1:3062"),
 ]
 
+# =========================
+# Public base URL (dev/pro)
+# =========================
+VERTICE360_PUBLIC_BASE_URL_DEV: str = "https://marion-weight-does-rotary.trycloudflare.com"
+VERTICE360_PUBLIC_BASE_URL_PRO: str = os.environ.get(
+    "VERTICE360_PUBLIC_BASE_URL_PRO", VERTICE360_PUBLIC_BASE_URL_DEV
+)
+VERTICE360_PUBLIC_BASE_URL: str = VERTICE360_PUBLIC_BASE_URL_DEV
+
 
 # =========================
 # Project / data roots
@@ -191,6 +200,17 @@ def mask(value: Optional[str], visible: int = 4) -> str:
     if not value:
         return ""
     return value[:visible] + "****"
+
+def public_url(path: str) -> str:
+    base = (VERTICE360_PUBLIC_BASE_URL or "").strip()
+    if not base:
+        return ""
+    clean_path = str(path or "").strip()
+    if not clean_path:
+        return base.rstrip("/")
+    if not clean_path.startswith("/"):
+        clean_path = f"/{clean_path}"
+    return f"{base.rstrip('/')}{clean_path}"
 
 def meta_whatsapp_enabled() -> bool:
     return bool(

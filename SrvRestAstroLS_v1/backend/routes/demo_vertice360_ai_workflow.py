@@ -61,7 +61,7 @@ async def reset_demo(data: ResetRequest) -> dict[str, Any]:
     return await services.reset_demo(data.reason)
 
 
-@post("/send-reply")
+@post("/send-reply", status_code=200)
 async def send_reply(data: SendReplyRequest) -> dict[str, Any]:
     text = data.text.strip()
     if not text:

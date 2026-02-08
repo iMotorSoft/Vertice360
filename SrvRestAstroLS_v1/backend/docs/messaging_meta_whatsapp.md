@@ -27,6 +27,8 @@
 # 4. Variables de entorno (globalVar.py)
 Se leen desde `backend/globalVar.py` via `os.environ`. No es obligatorio usar `~/.bashrc`; pueden venir de `.env`, shell, systemd, docker, etc.
 
+UX (Astro): variables globales en `astro/src/components/global.js`.
+
 | Variable | Proposito |
 | --- | --- |
 | `META_VERTICE360_WABA_TOKEN` | Bearer token para enviar mensajes via Graph API. |

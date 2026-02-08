@@ -19,6 +19,7 @@ def test_multi_intent_price_location():
     assert output.get("primaryIntent") == "price"
     assert output.get("intent") == "price"
     assert "location" in (output.get("secondaryIntents") or [])
+    assert output.get("decision") == "ask_next_best_question"
     pragmatics = output.get("pragmatics") or {}
     questions = pragmatics.get("recommendedQuestions") or []
     joined = " ".join(questions).lower()
@@ -26,5 +27,4 @@ def test_multi_intent_price_location():
     assert "presupuesto" in joined and "moneda" in joined
 
     response = (output.get("responseText") or "").lower()
-    assert "precio" in response
-    assert "zona" in response or "ubicacion" in response
+    assert "presupuesto" in response or "moneda" in response

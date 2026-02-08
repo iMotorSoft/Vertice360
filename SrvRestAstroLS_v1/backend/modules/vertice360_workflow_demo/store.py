@@ -38,6 +38,54 @@ def _touch(ticket: dict[str, Any]) -> None:
     ticket["updatedAt"] = _epoch_ms()
 
 
+def _ensure_commercial(ticket: dict[str, Any]) -> dict[str, Any]:
+    commercial = ticket.get("commercial")
+    if not isinstance(commercial, dict):
+        commercial = {}
+        ticket["commercial"] = commercial
+    for key in ("zona", "tipologia", "presupuesto", "moneda", "fecha_mudanza"):
+        commercial.setdefault(key, None)
+    return commercial
+
+
+def _ensure_ai_context(ticket: dict[str, Any]) -> dict[str, Any]:
+    ai_context = ticket.get("ai_context")
+    if not isinstance(ai_context, dict):
+        ai_context = {}
+        ticket["ai_context"] = ai_context
+    ai_context.setdefault("primaryIntentLocked", None)
+    slots = ai_context.get("commercialSlots")
+    if not isinstance(slots, dict):
+        slots = {}
+        ai_context["commercialSlots"] = slots
+    for key in ("zona", "tipologia", "presupuesto", "moneda", "fecha_mudanza"):
+        slots.setdefault(key, None)
+    return ai_context
+
+
+def _ensure_slot_memory(ticket: dict[str, Any]) -> dict[str, Any]:
+    slot_memory = ticket.get("slot_memory")
+    if not isinstance(slot_memory, dict):
+        slot_memory = {}
+        ticket["slot_memory"] = slot_memory
+    slot_memory.setdefault("zona", None)
+    slot_memory.setdefault("tipologia", None)
+    slot_memory.setdefault("presupuesto_amount", None)
+    slot_memory.setdefault("presupuesto_raw", None)
+    slot_memory.setdefault("moneda", None)
+    slot_memory.setdefault("fecha_mudanza", None)
+    slot_memory.setdefault("budget_ambiguous", False)
+    slot_memory.setdefault("budget_confirmed", False)
+    slot_memory.setdefault("confirmed_budget", False)
+    slot_memory.setdefault("confirmed_currency", False)
+    slot_memory.setdefault("last_question", None)
+    slot_memory.setdefault("last_question_key", None)
+    slot_memory.setdefault("last_asked_slot", None)
+    slot_memory.setdefault("asked_count", 0)
+    slot_memory.setdefault("pending_ambiguity", None)
+    return slot_memory
+
+
 def _is_duplicate_timeline_event(
     last_event: dict[str, Any] | None,
     name: str,
@@ -107,14 +155,34 @@ def _apply_inbound_updates(ticket: dict[str, Any], inbound: dict[str, Any]) -> d
     return patch
 
 
+def _find_active_ticket_by_phone(phone: str) -> dict[str, Any] | None:
+    if not phone:
+        return None
+    # Reverse search to find latest
+    for ticket in reversed(tickets.values()):
+        # Check matching phone
+        t_phone = (ticket.get("customer") or {}).get("from")
+        if t_phone == phone:
+            # Check if active (not closed)
+            status = str(ticket.get("status") or "").upper()
+            if status != "CLOSED":
+                return ticket
+    return None
+
+
 async def create_or_get_ticket_from_inbound(inbound: dict[str, Any]) -> dict[str, Any]:
     raw_ticket_id = inbound.get("ticketId")
     ticket_id = str(raw_ticket_id).strip() if raw_ticket_id is not None else ""
-    if ticket_id in tickets:
+    
+    # If explicit ticketId provided, lookup directly
+    if ticket_id and ticket_id in tickets:
         ticket = tickets[ticket_id]
         prev_status = ticket.get("status")
         patch = _apply_inbound_updates(ticket, inbound)
         next_status = ticket.get("status")
+        _ensure_commercial(ticket)
+        _ensure_ai_context(ticket)
+        _ensure_slot_memory(ticket)
         if patch:
             _touch(ticket)
             _, appended = _append_timeline_event(ticket, events.TICKET_UPDATED, {"patch": patch})
@@ -128,6 +196,34 @@ async def create_or_get_ticket_from_inbound(inbound: dict[str, Any]) -> dict[str
                 )
         return ticket
 
+    # If no ticketId, accept an active ticket for this user
+    phone = inbound.get("from") or (inbound.get("customer") or {}).get("from")
+    existing_ticket = _find_active_ticket_by_phone(phone)
+    if existing_ticket:
+        ticket = existing_ticket
+        ticket_id = ticket["ticketId"]
+        prev_status = ticket.get("status")
+        patch = _apply_inbound_updates(ticket, inbound)
+        next_status = ticket.get("status")
+        _ensure_commercial(ticket)
+        _ensure_ai_context(ticket)
+        _ensure_slot_memory(ticket)
+        # Even if no structural patch, we might want to log the "re-attach" implicitly
+        # by simply returning it. The inbound message will be added by add_message separately.
+        if patch:
+            _touch(ticket)
+            _, appended = _append_timeline_event(ticket, events.TICKET_UPDATED, {"patch": patch})
+            if appended:
+                await events.emit_ticket_updated(
+                    ticket_id,
+                    prev_status,
+                    next_status,
+                    patch,
+                    actor="inbound",
+                )
+        return ticket
+
+    # Create new if none found
     if not ticket_id:
         ticket_id = _reserve_ticket_id()
     now_ms = _epoch_ms()
@@ -143,6 +239,41 @@ async def create_or_get_ticket_from_inbound(inbound: dict[str, Any]) -> dict[str
         "sla": inbound.get("sla"),
         "timeline": [],
         "messages": [],
+        "commercial": {
+            "zona": None,
+            "tipologia": None,
+            "presupuesto": None,
+            "moneda": None,
+            "fecha_mudanza": None,
+        },
+        "ai_context": {
+            "primaryIntentLocked": None,
+            "commercialSlots": {
+                "zona": None,
+                "tipologia": None,
+                "presupuesto": None,
+                "moneda": None,
+                "fecha_mudanza": None,
+            },
+        },
+        "slot_memory": {
+            "zona": None,
+            "tipologia": None,
+            "presupuesto_amount": None,
+            "presupuesto_raw": None,
+            "moneda": None,
+            "fecha_mudanza": None,
+            "budget_ambiguous": False,
+            "budget_confirmed": False,
+            "confirmed_budget": False,
+            "confirmed_currency": False,
+            "last_question": None,
+            "last_question_key": None,
+            "last_asked_slot": None,
+            "asked_count": 0,
+            "pending_ambiguity": None,
+        },
+        "pendingAction": None,
         "docsReceivedAt": inbound.get("docsReceivedAt"),
         "createdAt": now_ms,
         "updatedAt": now_ms,
@@ -265,6 +396,38 @@ def add_message(ticket_id: str, message: dict[str, Any]) -> None:
     ticket["lastMessageText"] = message.get("text")
     ticket["lastMessageAt"] = message.get("at")
     _touch(ticket)
+
+
+
+def update_ticket_commercial(ticket_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+    ticket = tickets.get(ticket_id)
+    if not ticket:
+        raise KeyError("ticket not found")
+    commercial = _ensure_commercial(ticket)
+    ai_context = _ensure_ai_context(ticket)
+    changed = False
+    for key, value in patch.items():
+        if value is None:
+            continue
+        if commercial.get(key) != value:
+            commercial[key] = value
+            changed = True
+    slots = ai_context.get("commercialSlots")
+    if isinstance(slots, dict):
+        for key in ("zona", "tipologia", "presupuesto", "moneda", "fecha_mudanza"):
+            slots[key] = commercial.get(key)
+    if changed:
+        _touch(ticket)
+    return commercial
+
+
+def set_pending_action(ticket_id: str, action: str | None) -> None:
+    ticket = tickets.get(ticket_id)
+    if not ticket:
+        raise KeyError("ticket not found")
+    if ticket.get("pendingAction") != action:
+        ticket["pendingAction"] = action
+        _touch(ticket)
 
 
 def touch_ticket(ticket_id: str) -> None:

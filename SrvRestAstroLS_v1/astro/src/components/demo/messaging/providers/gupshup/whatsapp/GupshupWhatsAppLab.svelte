@@ -19,7 +19,6 @@
   /** @type {EventSource | null} */
   let source = null;
 
-  let provider = $state("meta");
   let to = $state("");
   let text = $state("");
   let isSending = $state(false);
@@ -36,8 +35,22 @@
     }
   };
 
+  const shouldInclude = (event, parsed) => {
+    if (parsed?.kind === "custom") {
+      const value = parsed.value;
+      if (value && typeof value === "object" && "provider" in value) {
+        return value.provider === "gupshup";
+      }
+      return typeof parsed.name === "string" && parsed.name.startsWith("messaging.");
+    }
+
+    return typeof event?.type === "string" && event.type.startsWith("messaging.");
+  };
+
   const appendEvent = (event) => {
     const parsed = parseSseData(event.data);
+    if (!shouldInclude(event, parsed)) return;
+
     eventSeq += 1;
     const entry = {
       id: eventSeq,
@@ -85,11 +98,7 @@
 
     try {
       const payload = { to: to.trim(), text: text.trim() };
-      const endpoint =
-        provider === "gupshup"
-          ? "/api/demo/messaging/gupshup/whatsapp/send"
-          : "/api/demo/messaging/meta/whatsapp/send";
-      const response = await fetch(`${URL_REST}${endpoint}`, {
+      const response = await fetch(`${URL_REST}/api/demo/messaging/gupshup/whatsapp/send`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -160,16 +169,6 @@
 
       <label class="form-control w-full">
         <div class="label">
-          <span class="label-text">Provider</span>
-        </div>
-        <select class="select select-bordered w-full" bind:value={provider}>
-          <option value="meta">Meta</option>
-          <option value="gupshup">Gupshup</option>
-        </select>
-      </label>
-
-      <label class="form-control w-full">
-        <div class="label">
           <span class="label-text">To</span>
         </div>
         <input
@@ -186,7 +185,7 @@
         <textarea
           class="textarea textarea-bordered w-full"
           rows="4"
-          placeholder="Hello from Meta WhatsApp lab"
+          placeholder="Hello from Gupshup WhatsApp lab"
           bind:value={text}
         ></textarea>
       </label>
@@ -199,7 +198,7 @@
         >
           {isSending ? "Sending..." : "Send"}
         </button>
-        <span class="text-xs text-neutral-500">POST {provider === "gupshup" ? "/api/demo/messaging/gupshup/whatsapp/send" : "/api/demo/messaging/meta/whatsapp/send"}</span>
+        <span class="text-xs text-neutral-500">POST /api/demo/messaging/gupshup/whatsapp/send</span>
       </div>
 
       <div class="space-y-2">

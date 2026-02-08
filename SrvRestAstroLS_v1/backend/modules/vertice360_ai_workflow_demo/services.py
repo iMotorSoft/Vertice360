@@ -38,6 +38,7 @@ async def run_workflow(
     input_text: str,
     mode: str | None = None,
     metadata: dict[str, Any] | None = None,
+    context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if workflow_id != WORKFLOW_ID:
         raise ValueError("workflow not found")
@@ -61,6 +62,13 @@ async def run_workflow(
         "input": input_text,
         "mode": mode,
     }
+    if isinstance(context, dict):
+        intent_hint = context.get("intentHint") or context.get("intent") or context.get("primaryIntentLocked")
+        if intent_hint:
+            state["intent_hint"] = str(intent_hint)
+        commercial_slots = context.get("commercialSlots") or context.get("commercial_slots")
+        if isinstance(commercial_slots, dict):
+            state["commercial_slots"] = commercial_slots
     try:
         final_state = await workflow_graph.ainvoke(state)
     except Exception as exc:
@@ -70,6 +78,11 @@ async def run_workflow(
         raise
 
     primary_intent = final_state.get("primary_intent") or final_state.get("intent") or "general"
+    used_fallback = bool(final_state.get("used_fallback") or not llm_provider_configured())
+    fallback_reason = final_state.get("fallback_reason")
+    if used_fallback and not fallback_reason and not llm_provider_configured():
+        fallback_reason = "openai_key_missing"
+
     output = {
         "responseText": final_state.get("response_text"),
         "intent": primary_intent,
@@ -80,6 +93,18 @@ async def run_workflow(
         "entities": final_state.get("entities") or {},
         "normalizedInput": final_state.get("normalized_input"),
         "pragmatics": final_state.get("pragmatics") or {},
+        "missingSlotsCount": (final_state.get("pragmatics") or {}).get("missingSlotsCount"),
+        "recommendedQuestion": final_state.get("recommended_question")
+        or (final_state.get("pragmatics") or {}).get("recommendedQuestion"),
+        "recommendedQuestions": final_state.get("recommended_questions")
+        or (final_state.get("pragmatics") or {}).get("recommendedQuestions")
+        or [],
+        "usedFallback": used_fallback,
+        "fallbackReason": fallback_reason,
+        "model": final_state.get("response_model"),
+        "commercial": final_state.get("commercial_slots") or final_state.get("commercial"),
+        "summary": final_state.get("summary"),
+        "nextActionQuestion": final_state.get("next_action_question"),
     }
     completed = store.complete_run(run_id, output)
     await events.emit_run_completed(run_id, output, completed.get("endedAt") or _epoch_ms())
@@ -91,8 +116,9 @@ async def start_run(
     input_text: str,
     mode: str | None = None,
     metadata: dict[str, Any] | None = None,
+    context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return await run_workflow(workflow_id, input_text, mode, metadata=metadata)
+    return await run_workflow(workflow_id, input_text, mode, metadata=metadata, context=context)
 
 
 def list_runs() -> list[dict[str, Any]]:

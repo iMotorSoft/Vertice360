@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+import asyncio
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 import pytest
-from litestar.testing import TestClient
+import httpx
 
 from backend.modules.agui_stream.broadcaster import broadcaster
 from backend.modules.vertice360_workflow_demo import services, store
 from backend.ls_iMotorSoft_Srv01_demo import create_app
+
+_ORIGINAL_SEND_WHATSAPP_TEXT = services._send_whatsapp_text
+_ORIGINAL_RUN_AI_WORKFLOW_REPLY = services._run_ai_workflow_reply
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +24,12 @@ def reset_workflow_store():
     store.reset_store()
     yield
     store.reset_store()
+
+
+@pytest.fixture(autouse=True)
+def reset_workflow_service_hooks(monkeypatch):
+    monkeypatch.setattr(services, "_send_whatsapp_text", _ORIGINAL_SEND_WHATSAPP_TEXT)
+    monkeypatch.setattr(services, "_run_ai_workflow_reply", _ORIGINAL_RUN_AI_WORKFLOW_REPLY)
 
 
 @pytest.fixture(autouse=True)
@@ -60,5 +70,23 @@ def event_recorder(monkeypatch):
 @pytest.fixture()
 def client():
     app = create_app()
-    with TestClient(app) as test_client:
-        yield test_client
+
+    class SyncASGIClient:
+        def request(self, method: str, url: str, **kwargs):
+            async def _run_request():
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver.local",
+                ) as async_client:
+                    return await async_client.request(method, url, **kwargs)
+
+            return asyncio.run(_run_request())
+
+        def get(self, url: str, **kwargs):
+            return self.request("GET", url, **kwargs)
+
+        def post(self, url: str, **kwargs):
+            return self.request("POST", url, **kwargs)
+
+    yield SyncASGIClient()

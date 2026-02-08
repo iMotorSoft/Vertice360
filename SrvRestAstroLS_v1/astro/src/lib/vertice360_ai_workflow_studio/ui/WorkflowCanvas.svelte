@@ -24,11 +24,18 @@
     },
   ];
 
-  let { activeNodeId = null, activeRunId = null, stepsByNodeId = {} } = $props();
+  let { activeNodeId = null, activeRunId = null, stepsByNodeId = {}, activeOutput = null } = $props();
 
   const isActive = (nodeId) => nodeId && nodeId === activeNodeId;
 
   const getStep = (nodeId) => stepsByNodeId?.[nodeId] || null;
+
+  const needsInfo = $derived.by(() =>
+    activeOutput?.decision === "ask_next_best_question" ||
+    !!activeOutput?.recommendedQuestion ||
+    !!activeOutput?.pragmatics?.recommendedQuestion
+  );
+  const isNeedsInfoNode = (nodeId) => Boolean(needsInfo && nodeId === "decide_next");
 
   const statusLabel = (nodeId) => {
     if (isActive(nodeId)) return "running";
@@ -107,6 +114,8 @@
             isActive(node.id)
               ? "border-primary/40 bg-primary/10"
               : "border-base-200 bg-white"
+          } ${
+            isNeedsInfoNode(node.id) ? "border-amber-300 ring-1 ring-amber-300/60" : ""
           }`}
           title={tooltipText(node.id)}
         >
@@ -120,12 +129,17 @@
             {index + 1}
           </div>
           <div class="min-w-0">
-            <p class="font-semibold text-sm text-slate-900 truncate">
+            <p class="font-semibold text-sm text-slate-900 break-words overflow-hidden">
               {node.label}
             </p>
-            <p class="text-xs text-neutral-500 truncate">{node.detail}</p>
+            <p class="text-xs text-neutral-500 break-words overflow-hidden">
+              {node.detail}
+            </p>
           </div>
           <div class="ml-auto flex flex-wrap items-center justify-end gap-2 min-w-0">
+            {#if isNeedsInfoNode(node.id)}
+              <span class="badge badge-warning badge-sm text-xs">Needs info</span>
+            {/if}
             {#if duration !== null}
               <span class="badge badge-outline badge-sm text-xs">{duration}ms</span>
             {/if}

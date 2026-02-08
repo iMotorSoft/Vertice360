@@ -1,0 +1,24 @@
+---
+import BaseLayout from "../../../../../../layouts/BaseLayout.astro";
+import GupshupWhatsAppLab from "../../../../../../components/demo/messaging/providers/gupshup/whatsapp/GupshupWhatsAppLab.svelte";
+
+const branding = {
+  displayName: "Gupshup WhatsApp Provider Lab",
+  logoUrl: "/logo-placeholder.svg",
+  primaryColor: "#0F766E",
+  secondaryColor: "#22C55E",
+  accentColor: "#16A34A",
+};
+---
+
+<BaseLayout brand={branding}>
+  <section class="space-y-2 mb-6">
+    <p class="text-sm uppercase tracking-wide text-emerald-700 font-semibold">Messaging Provider Lab</p>
+    <h1 class="text-3xl font-bold text-slate-900">Gupshup WhatsApp</h1>
+    <p class="text-neutral-600">
+      Minimal client-side lab for outbound tests and live SSE events.
+    </p>
+  </section>
+
+  <GupshupWhatsAppLab client:only="svelte" />
+</BaseLayout>
