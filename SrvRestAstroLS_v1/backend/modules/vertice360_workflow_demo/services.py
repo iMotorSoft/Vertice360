@@ -20,6 +20,11 @@ DOC_VALIDATION_SLA_MS = 24 * 60 * 60 * 1000
 logger = logging.getLogger(__name__)
 
 
+async def send_text_message(to: str, text: str) -> dict[str, Any]:
+    """Backward-compatible alias used by tests and demo hooks."""
+    return await meta_send_text(to, text)
+
+
 def _epoch_ms() -> int:
     return int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000)
 
@@ -612,7 +617,7 @@ async def _send_whatsapp_text(provider: str, to: str, text: str) -> dict[str, An
     if provider == "gupshup_whatsapp":
         ack = await gupshup_send_text(to, text)
         return {"id": ack.provider_message_id, "raw": ack.raw}
-    return await meta_send_text(to, text)
+    return await send_text_message(to, text)
 
 
 async def send_demo_reply(ticket_id: str, to: str, text: str) -> dict[str, Any]:

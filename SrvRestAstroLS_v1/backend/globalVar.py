@@ -38,9 +38,9 @@ FRONTEND_ORIGINS: list[str] = [
 # =========================
 # Public base URL (dev/pro)
 # =========================
-VERTICE360_PUBLIC_BASE_URL_DEV: str = "https://marion-weight-does-rotary.trycloudflare.com"
+VERTICE360_PUBLIC_BASE_URL_DEV: str = "https://resolved-cruise-california-derby.trycloudflare.com"
 VERTICE360_PUBLIC_BASE_URL_PRO: str = os.environ.get(
-    "VERTICE360_PUBLIC_BASE_URL_PRO", VERTICE360_PUBLIC_BASE_URL_DEV
+    "VERTICE360_PUBLIC_BASE_URL_PRO", "https://demo.pozo360.imotorsoft.com"
 )
 VERTICE360_PUBLIC_BASE_URL: str = VERTICE360_PUBLIC_BASE_URL_DEV
 
@@ -137,7 +137,7 @@ META_GRAPH_VERSION: str = os.environ.get("META_GRAPH_VERSION", "v20.0")
 # =========================
 DEFAULT_GUPSHUP_BASE_URL: str = "https://api.gupshup.io"
 GUPSHUP_APP_NAME_DEV: str = os.environ.get("GUPSHUP_APP_NAME_DEV", "")
-GUPSHUP_APP_NAME_PRO: str = os.environ.get("GUPSHUP_APP_NAME_PRO", GUPSHUP_APP_NAME_DEV)
+GUPSHUP_APP_NAME_PRO: str = os.environ.get("GUPSHUP_APP_NAME_PRO", "vertice360pro")
 GUPSHUP_API_KEY_DEV: str = os.environ.get("GUPSHUP_API_KEY_DEV", "")
 GUPSHUP_API_KEY_PRO: str = os.environ.get("GUPSHUP_API_KEY_PRO", GUPSHUP_API_KEY_DEV)
 GUPSHUP_SRC_NUMBER_DEV: str = os.environ.get("GUPSHUP_SRC_NUMBER_DEV", "")
@@ -146,7 +146,7 @@ GUPSHUP_BASE_URL_DEV: str = os.environ.get("GUPSHUP_BASE_URL_DEV", DEFAULT_GUPSH
 GUPSHUP_BASE_URL_PRO: str = os.environ.get("GUPSHUP_BASE_URL_PRO", GUPSHUP_BASE_URL_DEV)
 
 # Seleccion manual DEV/PRO → FINAL
-GUPSHUP_APP_NAME: str = GUPSHUP_APP_NAME_DEV
+GUPSHUP_APP_NAME: str = GUPSHUP_APP_NAME_PRO
 GUPSHUP_API_KEY: str = GUPSHUP_API_KEY_DEV
 GUPSHUP_SRC_NUMBER: str = GUPSHUP_SRC_NUMBER_DEV
 GUPSHUP_BASE_URL: str = GUPSHUP_BASE_URL_DEV
