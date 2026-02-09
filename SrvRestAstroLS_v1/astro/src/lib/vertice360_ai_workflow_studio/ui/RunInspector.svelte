@@ -8,6 +8,10 @@
   let draft = $state("");
   let sending = $state(false);
   let sendError = $state("");
+  let sendErrorInfo = $state(null);
+  let sendProvider = $state("meta");
+  let providerLockedByUser = $state(false);
+  let providerContextTicketId = $state(null);
   let copied = $state(false);
   let nbqCopied = $state(false);
 
@@ -123,11 +127,44 @@
     return lastMessage?.data?.from || lastMessage?.data?.wa_id || "";
   });
 
+  const detectedProvider = $derived.by(() => {
+    const raw = (
+      lastMessage?.data?.provider ||
+      lastMessage?.data?.result?.provider ||
+      ""
+    )
+      .toString()
+      .trim()
+      .toLowerCase();
+    if (!raw) return null;
+    if (raw === "gupshup" || raw === "gupshup_whatsapp" || raw.startsWith("gupshup")) {
+      return "gupshup";
+    }
+    if (raw === "meta" || raw === "meta_whatsapp" || raw.startsWith("meta")) {
+      return "meta";
+    }
+    return null;
+  });
+
   const currentText = $derived(editing ? draft : responseText);
 
   $effect(() => {
     if (!editing) {
       draft = responseText || "";
+    }
+  });
+
+  $effect(() => {
+    if (providerContextTicketId !== activeTicketId) {
+      providerContextTicketId = activeTicketId;
+      providerLockedByUser = false;
+    }
+  });
+
+  $effect(() => {
+    if (!detectedProvider || providerLockedByUser) return;
+    if (sendProvider !== detectedProvider) {
+      sendProvider = detectedProvider;
     }
   });
 
@@ -168,14 +205,21 @@
     if (!canSend || sending) return;
     sending = true;
     sendError = "";
+    sendErrorInfo = null;
     const result = await sendReply({
       ticketId: activeTicketId,
       to: replyTo,
       text: currentText.trim(),
+      provider: sendProvider,
     });
     sending = false;
     if (!result.ok) {
       sendError = result.error || "Failed to send reply";
+      sendErrorInfo = {
+        provider: result.provider || sendProvider,
+        upstreamStatus: result.upstreamStatus ?? null,
+        message: sendError,
+      };
       return;
     }
     editing = false;
@@ -238,6 +282,19 @@
           <button class="btn btn-ghost btn-xs" onclick={toggleEdit}>
             {editing ? "Cerrar edicion" : "Editar & reenviar"}
           </button>
+          <label class="flex items-center gap-2 text-xs text-neutral-600">
+            Provider
+            <select
+              class="select select-bordered select-xs"
+              bind:value={sendProvider}
+              onchange={() => {
+                providerLockedByUser = true;
+              }}
+            >
+              <option value="meta">meta</option>
+              <option value="gupshup">gupshup</option>
+            </select>
+          </label>
           {#if activeTicketId && replyTo}
             <button class="btn btn-primary btn-xs" onclick={handleSend} disabled={!canSend || sending}>
               {sending ? "Enviando..." : "Enviar por WhatsApp"}
@@ -249,7 +306,13 @@
             </span>
           {/if}
         </div>
-        {#if sendError}
+        {#if sendErrorInfo}
+          <div role="alert" class="alert alert-error py-2 px-3 text-xs">
+            <span>provider: {sendErrorInfo.provider}</span>
+            <span>upstream_status: {sendErrorInfo.upstreamStatus ?? "n/a"}</span>
+            <span>{sendErrorInfo.message}</span>
+          </div>
+        {:else if sendError}
           <p class="text-xs text-error">{sendError}</p>
         {/if}
         {#if editing}

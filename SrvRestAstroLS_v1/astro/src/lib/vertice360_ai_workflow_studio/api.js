@@ -1,6 +1,7 @@
 import { URL_REST } from "../../components/global.js";
 
 const API_BASE = `${URL_REST}/api/demo/vertice360-ai-workflow`;
+const MESSAGING_API_BASE = `${URL_REST}/api/demo/messaging`;
 
 const readError = async (response) => {
   try {
@@ -37,6 +38,14 @@ const postJson = (path, body) =>
     body: JSON.stringify(body ?? {}),
   });
 
+const normalizeProvider = (value) => {
+  const raw = (value || "").toString().trim().toLowerCase();
+  if (raw === "gupshup" || raw === "gupshup_whatsapp" || raw === "gs") {
+    return "gupshup";
+  }
+  return "meta";
+};
+
 export const startRun = ({ input, workflowId = "vertice360-ai-workflow", mode = "heuristic" } = {}) =>
   postJson("/runs", {
     workflowId,
@@ -46,5 +55,69 @@ export const startRun = ({ input, workflowId = "vertice360-ai-workflow", mode = 
 
 export const listRuns = () => requestJson("/runs");
 
-export const sendReply = ({ ticketId, to, text } = {}) =>
-  postJson("/send-reply", { ticketId, to, text });
+const readSendError = async (response, fallbackProvider) => {
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch (err) {
+    payload = null;
+  }
+
+  const provider =
+    payload?.provider ||
+    fallbackProvider ||
+    "meta";
+  const upstreamStatus =
+    payload?.error?.upstream_status ??
+    payload?.error?.status_code ??
+    payload?.status_code ??
+    null;
+  const message =
+    payload?.error?.message ||
+    payload?.detail ||
+    (typeof payload?.error === "string" ? payload.error : "") ||
+    response.statusText ||
+    "Request failed";
+
+  return {
+    provider,
+    upstreamStatus:
+      typeof upstreamStatus === "number" ? upstreamStatus : null,
+    error: message,
+    payload,
+  };
+};
+
+export const sendReply = async ({ ticketId, to, text, provider = "meta" } = {}) => {
+  const normalizedProvider = normalizeProvider(provider);
+  const body = { provider: normalizedProvider, to, text, ticketId };
+  try {
+    const response = await fetch(`${MESSAGING_API_BASE}/whatsapp/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const error = await readSendError(response, normalizedProvider);
+      return {
+        ok: false,
+        provider: error.provider || normalizedProvider,
+        upstreamStatus: error.upstreamStatus,
+        error: error.error,
+        payload: error.payload,
+      };
+    }
+    const data = await response.json();
+    return { ok: true, data };
+  } catch (err) {
+    return {
+      ok: false,
+      provider: normalizedProvider,
+      upstreamStatus: null,
+      error: err instanceof Error ? err.message : "Network error",
+      payload: null,
+    };
+  }
+};

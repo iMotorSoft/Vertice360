@@ -12,7 +12,11 @@ def normalize_provider(value: str | None) -> ProviderName:
     if not value:
         return "meta"
     cleaned = value.strip().lower()
-    return "gupshup" if cleaned == "gupshup" else "meta"
+    if cleaned in ("gupshup", "gupshup_whatsapp", "gs"):
+        return "gupshup"
+    if cleaned in ("meta", "meta_whatsapp", "wa_meta"):
+        return "meta"
+    return "meta"
 
 
 def validate_provider(value: str | None, default: ProviderName = "meta") -> ProviderName:
@@ -20,6 +24,8 @@ def validate_provider(value: str | None, default: ProviderName = "meta") -> Prov
     if not value:
         return default
     cleaned = value.strip().lower()
-    if cleaned in ("meta", "gupshup"):
-        return cleaned  # type: ignore[return-value]
+    if cleaned in ("meta", "meta_whatsapp", "wa_meta"):
+        return "meta"
+    if cleaned in ("gupshup", "gupshup_whatsapp", "gs"):
+        return "gupshup"
     return default

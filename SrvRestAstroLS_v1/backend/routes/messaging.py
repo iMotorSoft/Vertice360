@@ -29,6 +29,7 @@ from backend.modules.messaging.providers.gupshup.whatsapp.mapper import (
     parse_inbound as gupshup_parse_inbound,
     parse_status as gupshup_parse_status,
 )
+from backend.modules.messaging.providers.registry import normalize_provider
 from backend.modules.agui_stream import broadcaster
 from backend.modules.vertice360_ai_workflow_demo.bridge import maybe_start_ai_workflow_from_inbound
 from backend.modules.vertice360_workflow_demo.services import process_inbound_message
@@ -46,53 +47,7 @@ class DemoMessagingController(Controller):
     path = "/api/demo/messaging"
     tags = ["Demo Messaging"]
 
-    @post("/meta/whatsapp/send")
-    async def send_whatsapp_demo(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Demo endpoint to send a WhatsApp message via Meta Cloud API.
-        Body: {"to": "...", "text": "..."}
-        """
-        to = data.get("to")
-        text = data.get("text")
-        
-        if not to or not text:
-            return {"error": "Missing 'to' or 'text' in body"}
-
-        # 1. Send via Provider
-        try:
-            result = await send_text_message(to, text)
-        except MetaWhatsAppSendError as exc:
-            result = {"status": "error", "status_code": exc.status_code, "response": exc.err}
-        except ValueError as exc:
-            result = {"status": "error", "response": str(exc)}
-        
-        # 2. Broadcast event to AG-UI stream (if success or attempt)
-        # We broadcast the result so the frontend can show it.
-        await broadcaster.publish(
-            "messaging.outbound",
-            {
-                "provider": "meta",
-                "service": "whatsapp",
-                "to": to,
-                "text": text,
-                "result": result
-            }
-        )
-
-        return result
-
-    @post("/gupshup/whatsapp/send", status_code=200)
-    async def send_gupshup_whatsapp_demo(self, data: Dict[str, Any]) -> Response:
-        """
-        Demo endpoint to send a WhatsApp message via Gupshup.
-        Body: {"to": "...", "text": "..."}
-        """
-        to = data.get("to")
-        text = data.get("text")
-
-        if not to or not text:
-            raise HTTPException(status_code=400, detail="Missing 'to' or 'text' in body")
-
+    async def _send_gupshup_whatsapp(self, to: str, text: str) -> Response:
         config = GupshupConfig.from_env()
         env_debug = {
             "has_api_key": bool(config.api_key),
@@ -155,6 +110,112 @@ class DemoMessagingController(Controller):
         )
 
         return Response(status_code=200, content=result, media_type=MediaType.JSON)
+
+    @post("/whatsapp/send", status_code=200)
+    async def send_whatsapp_unified_demo(self, data: Dict[str, Any]) -> Response:
+        """
+        Unified demo endpoint for WhatsApp sends across providers.
+        Body: {"provider":"meta|gupshup","to":"...","text":"..."}
+        """
+        provider = normalize_provider(data.get("provider"))
+        to = data.get("to")
+        text = data.get("text")
+
+        if not to or not text:
+            raise HTTPException(status_code=400, detail="Missing 'to' or 'text' in body")
+
+        if provider == "gupshup":
+            return await self._send_gupshup_whatsapp(to, text)
+
+        try:
+            raw = await send_text_message(to, text)
+        except MetaWhatsAppSendError as exc:
+            payload = {
+                "ok": False,
+                "provider": "meta",
+                "error": _build_meta_error_payload(exc),
+            }
+            return Response(status_code=502, content=payload, media_type=MediaType.JSON)
+        except ValueError as exc:
+            payload = {
+                "ok": False,
+                "provider": "meta",
+                "error": _build_meta_error_payload(exc),
+            }
+            return Response(status_code=502, content=payload, media_type=MediaType.JSON)
+        except Exception as exc:  # noqa: BLE001 - explicit payload for demo diagnostics
+            payload = {
+                "ok": False,
+                "provider": "meta",
+                "error": _build_meta_error_payload(exc),
+            }
+            return Response(status_code=502, content=payload, media_type=MediaType.JSON)
+
+        result = {
+            "ok": True,
+            "provider": "meta",
+            "message_id": _extract_provider_message_id(raw),
+            "raw": raw,
+        }
+        await broadcaster.publish(
+            "messaging.outbound",
+            {
+                "provider": "meta",
+                "service": "whatsapp",
+                "to": to,
+                "text": text,
+                "result": result,
+            },
+        )
+        return Response(status_code=200, content=result, media_type=MediaType.JSON)
+
+    @post("/meta/whatsapp/send")
+    async def send_whatsapp_demo(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Demo endpoint to send a WhatsApp message via Meta Cloud API.
+        Body: {"to": "...", "text": "..."}
+        """
+        to = data.get("to")
+        text = data.get("text")
+        
+        if not to or not text:
+            return {"error": "Missing 'to' or 'text' in body"}
+
+        # 1. Send via Provider
+        try:
+            result = await send_text_message(to, text)
+        except MetaWhatsAppSendError as exc:
+            result = {"status": "error", "status_code": exc.status_code, "response": exc.err}
+        except ValueError as exc:
+            result = {"status": "error", "response": str(exc)}
+        
+        # 2. Broadcast event to AG-UI stream (if success or attempt)
+        # We broadcast the result so the frontend can show it.
+        await broadcaster.publish(
+            "messaging.outbound",
+            {
+                "provider": "meta",
+                "service": "whatsapp",
+                "to": to,
+                "text": text,
+                "result": result
+            }
+        )
+
+        return result
+
+    @post("/gupshup/whatsapp/send", status_code=200)
+    async def send_gupshup_whatsapp_demo(self, data: Dict[str, Any]) -> Response:
+        """
+        Demo endpoint to send a WhatsApp message via Gupshup.
+        Body: {"to": "...", "text": "..."}
+        """
+        to = data.get("to")
+        text = data.get("text")
+
+        if not to or not text:
+            raise HTTPException(status_code=400, detail="Missing 'to' or 'text' in body")
+        return await self._send_gupshup_whatsapp(to, text)
 
 
 def _epoch_ms() -> int:
@@ -235,6 +296,59 @@ def _build_gupshup_error_payload(exc: Exception) -> Dict[str, Any]:
         "upstream_status": upstream_status,
         "upstream_body": _truncate_error_text(upstream_body),
         "url": url,
+    }
+
+
+def _extract_provider_message_id(raw: Dict[str, Any]) -> str:
+    messages = raw.get("messages")
+    if isinstance(messages, list) and messages:
+        message_id = messages[0].get("id")
+        if message_id:
+            return str(message_id)
+    message_id = raw.get("message_id") or raw.get("messageId") or raw.get("id")
+    return str(message_id) if message_id else ""
+
+
+def _meta_messages_url() -> str:
+    return (
+        f"https://graph.facebook.com/{globalVar.META_GRAPH_VERSION}/"
+        f"{globalVar.META_VERTICE360_PHONE_NUMBER_ID}/messages"
+    )
+
+
+def _build_meta_error_payload(exc: Exception) -> Dict[str, Any]:
+    upstream_status = getattr(exc, "status_code", None)
+    if not isinstance(upstream_status, int):
+        upstream_status = None
+
+    err_body = getattr(exc, "err", None)
+    if err_body is None:
+        err_body = str(exc)
+
+    message = str(exc)
+    if isinstance(err_body, dict):
+        maybe_message = (
+            err_body.get("error", {}).get("message")
+            if isinstance(err_body.get("error"), dict)
+            else err_body.get("message")
+        )
+        if isinstance(maybe_message, str) and maybe_message.strip():
+            message = maybe_message.strip()
+
+    if isinstance(err_body, str):
+        upstream_body = err_body
+    else:
+        try:
+            upstream_body = json.dumps(err_body, ensure_ascii=False)
+        except (TypeError, ValueError):
+            upstream_body = str(err_body)
+
+    return {
+        "type": exc.__class__.__name__,
+        "message": message,
+        "upstream_status": upstream_status,
+        "upstream_body": _truncate_error_text(upstream_body),
+        "url": _meta_messages_url(),
     }
 
 

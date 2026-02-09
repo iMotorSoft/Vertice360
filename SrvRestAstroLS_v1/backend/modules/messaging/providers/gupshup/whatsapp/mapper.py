@@ -66,16 +66,27 @@ def parse_inbound(payload: dict[str, Any]) -> list[NormalizedInbound]:
 
     results: list[NormalizedInbound] = []
     for message in messages:
+        payload_level_1 = message.get("payload") if isinstance(message.get("payload"), dict) else {}
+        payload_level_2 = (
+            payload_level_1.get("payload") if isinstance(payload_level_1.get("payload"), dict) else {}
+        )
         wa_id = _first_non_empty(
             message.get("wa_id"),
             message.get("from"),
             message.get("sender"),
             message.get("source"),
+            payload_level_1.get("wa_id"),
+            payload_level_1.get("from"),
+            payload_level_1.get("sender"),
+            payload_level_1.get("source"),
         )
         from_Candidate = _first_non_empty(
             message.get("from"),
             message.get("sender"),
             message.get("source"),
+            payload_level_1.get("from"),
+            payload_level_1.get("sender"),
+            payload_level_1.get("source"),
             wa_id,
         )
         # Fix for Gupshup v2 where sender is a dict {"phone": "...", ...}
@@ -88,18 +99,33 @@ def parse_inbound(payload: dict[str, Any]) -> list[NormalizedInbound]:
             message.get("destination"),
             message.get("dest"),
             message.get("recipient"),
+            payload_level_1.get("to"),
+            payload_level_1.get("destination"),
+            payload_level_1.get("dest"),
+            payload_level_1.get("recipient"),
         )
         text = _extract_text(message)
         timestamp = _first_non_empty(
             message.get("timestamp"),
             message.get("time"),
             message.get("ts"),
+            payload_level_1.get("timestamp"),
+            payload_level_1.get("time"),
+            payload_level_1.get("ts"),
         )
         message_id = _first_non_empty(
             message.get("message_id"),
             message.get("messageId"),
             message.get("id"),
             message.get("mid"),
+            payload_level_1.get("message_id"),
+            payload_level_1.get("messageId"),
+            payload_level_1.get("id"),
+            payload_level_1.get("mid"),
+            payload_level_2.get("message_id"),
+            payload_level_2.get("messageId"),
+            payload_level_2.get("id"),
+            payload_level_2.get("mid"),
         )
         results.append(
             NormalizedInbound(
@@ -147,6 +173,10 @@ def parse_status(payload: dict[str, Any]) -> list[NormalizedStatus]:
             status_payload.get("event"),
             status_payload.get("type"),
         )
+        normalized_status = _normalize_status(_as_str(raw_status))
+        # Wrapper events such as "message-event" are transport markers, not delivery states.
+        if normalized_status == "message-event":
+            continue
         timestamp = _first_non_empty(
             status.get("timestamp"),
             status.get("time"),
@@ -160,7 +190,7 @@ def parse_status(payload: dict[str, Any]) -> list[NormalizedStatus]:
                 provider="gupshup",
                 service="whatsapp",
                 message_id=_as_str(message_id),
-                status=_normalize_status(_as_str(raw_status)),
+                status=normalized_status,
                 timestamp=timestamp,
                 raw=status,
             )
@@ -243,6 +273,13 @@ def _looks_like_message(payload: dict[str, Any]) -> bool:
     if not has_content and "payload" in payload and isinstance(payload["payload"], dict):
         inner = payload["payload"]
         has_content = any(key in inner for key in ("text", "body", "caption"))
+        if (
+            not has_content
+            and "payload" in inner
+            and isinstance(inner["payload"], dict)
+        ):
+            inner_2 = inner["payload"]
+            has_content = any(key in inner_2 for key in ("text", "body", "caption"))
 
     has_destination = any(key in payload for key in ("to", "destination", "dest", "recipient"))
     return (has_sender and (has_content or has_destination)) or (has_content and has_destination)
@@ -265,6 +302,8 @@ def _looks_like_status(payload: dict[str, Any]) -> bool:
     if status_text in _NON_STATUS_TYPES:
         return False
     if status_text == "message-event":
+        if _looks_like_message_event_wrapper(payload):
+            return False
         return True
     if has_explicit_status:
         return True
@@ -277,6 +316,45 @@ def _looks_like_status(payload: dict[str, Any]) -> bool:
     if isinstance(status_value, dict):
         return False
     return True
+
+
+def _looks_like_message_event_wrapper(payload: dict[str, Any]) -> bool:
+    """Detect message-event wrappers that actually carry inbound content."""
+    candidates: list[dict[str, Any]] = []
+    current: Any = payload
+    for _ in range(3):
+        if not isinstance(current, dict):
+            break
+        candidates.append(current)
+        current = current.get("payload")
+
+    has_sender = any(
+        _first_non_empty(
+            node.get("from"),
+            node.get("sender"),
+            node.get("source"),
+            node.get("wa_id"),
+        )
+        is not None
+        for node in candidates
+    )
+    has_destination = any(
+        _first_non_empty(
+            node.get("to"),
+            node.get("destination"),
+            node.get("dest"),
+            node.get("recipient"),
+        )
+        is not None
+        for node in candidates
+    )
+    has_text_like = any(_extract_text(node) is not None for node in candidates)
+    has_non_status_type = any(
+        (_as_str(_first_non_empty(node.get("type"), node.get("event"), node.get("status"), node.get("state")))
+         or "").strip().lower() in _NON_STATUS_TYPES
+        for node in candidates
+    )
+    return (has_sender and has_text_like) or (has_non_status_type and (has_sender or has_destination or has_text_like))
 
 
 def _extract_text(message: dict[str, Any]) -> str | None:
@@ -292,6 +370,15 @@ def _extract_text(message: dict[str, Any]) -> str | None:
             return payload_text
         if isinstance(payload_text, dict):
             return _as_str(payload_text.get("body") or payload_text.get("text"))
+        nested_payload = payload.get("payload")
+        if isinstance(nested_payload, dict):
+            nested_text = nested_payload.get("text")
+            if isinstance(nested_text, str):
+                return nested_text
+            if isinstance(nested_text, dict):
+                return _as_str(nested_text.get("body") or nested_text.get("text"))
+            return _as_str(nested_payload.get("body") or nested_payload.get("caption"))
+        return _as_str(payload.get("body") or payload.get("caption"))
     return _as_str(message.get("message"))
 
 

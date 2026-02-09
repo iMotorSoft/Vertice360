@@ -105,3 +105,56 @@ def test_parse_inbound_message_wrapper_payload() -> None:
     assert message.message_id == "inbound-msg-001"
     assert message.text == "OK DobleVia"
     assert statuses == []
+
+
+def test_parse_inbound_message_event_wrapper_live_payload() -> None:
+    payload = {
+        "app": "vertice360dev",
+        "timestamp": 1770565000000,
+        "version": 2,
+        "type": "message-event",
+        "sender": {"phone": "541130946950"},
+        "destination": "5491100000000",
+        "payload": {
+            "id": "inbound-msg-002",
+            "type": "text",
+            "payload": {"text": "Hola live"},
+        },
+    }
+
+    messages = parse_inbound(payload)
+    statuses = parse_status(payload)
+
+    assert len(messages) == 1
+    message = messages[0]
+    assert message.provider == "gupshup"
+    assert message.service == "whatsapp"
+    assert message.from_ == "541130946950"
+    assert message.to == "5491100000000"
+    assert message.message_id == "inbound-msg-002"
+    assert message.text == "Hola live"
+    assert statuses == []
+
+
+def test_parse_status_message_event_does_not_emit_wrapper_status() -> None:
+    payload = {
+        "app": "vertice360dev",
+        "timestamp": 1770565000000,
+        "version": 2,
+        "type": "message-event",
+        "payload": {
+            "id": "status-msg-001",
+            "gsId": "gs-status-001",
+            "type": "delivered",
+            "timestamp": "1770565000",
+        },
+    }
+
+    statuses = parse_status(payload)
+    messages = parse_inbound(payload)
+
+    assert len(statuses) == 1
+    status = statuses[0]
+    assert status.message_id == "gs-status-001"
+    assert status.status == "delivered"
+    assert messages == []
