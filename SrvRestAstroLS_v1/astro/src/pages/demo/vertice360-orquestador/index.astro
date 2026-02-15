@@ -1,0 +1,81 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+
+const branding = {
+  displayName: "Vertice360 Demo",
+  logoUrl: "/logo-placeholder.svg",
+  primaryColor: "#0F766E",
+  secondaryColor: "#38BDF8",
+  accentColor: "#F59E0B",
+};
+
+const demoPhoneHuman = "+4526325250";
+const demoPhoneWa = "4526325250";
+const waText = "OBRA_PALERMO_01";
+const waUrl = `https://wa.me/${demoPhoneWa}/?text=${encodeURIComponent(waText)}`;
+const boardUrl = "/demo/vertice360-orquestador/orquestador?cliente=5491100000000";
+---
+
+<BaseLayout brand={branding}>
+  <section class="mx-auto max-w-3xl space-y-6">
+    <header class="space-y-2">
+      <p class="text-xs uppercase tracking-[0.25em] text-emerald-700 font-semibold">Vertice360 Demo</p>
+      <h1 class="text-2xl md:text-3xl font-bold text-slate-900">Vertice360 Orquestador</h1>
+      <p class="text-sm md:text-base text-slate-600">
+        Wireframe UX-only para validación de diseño. Sin lógica de negocio ni datos reales.
+      </p>
+    </header>
+
+    <div class="card border border-base-300 bg-base-100 shadow-sm">
+      <div class="card-body gap-4">
+        <p class="text-sm md:text-base text-slate-700">Para iniciar la demo, enviá un WhatsApp a:</p>
+        <p class="text-2xl font-semibold tracking-wide text-slate-900">{demoPhoneHuman}</p>
+        <a
+          href={waUrl}
+          target="_blank"
+          rel="noreferrer"
+          class="btn btn-primary w-full min-h-11 md:w-auto"
+        >
+          Abrir WhatsApp
+        </a>
+      </div>
+    </div>
+
+    <div class="grid gap-3 md:grid-cols-3">
+      <article class="card border border-base-300 bg-base-100 shadow-sm">
+        <div class="card-body p-4">
+          <span class="badge badge-neutral w-fit">1</span>
+          <h2 class="font-semibold text-slate-900">Iniciás el contacto (WhatsApp)</h2>
+          <p class="text-sm text-slate-600">
+            Enviás un mensaje con el código del proyecto. El asistente responde, hace preguntas y califica al
+            interesado.
+          </p>
+        </div>
+      </article>
+      <article class="card border border-base-300 bg-base-100 shadow-sm">
+        <div class="card-body p-4">
+          <span class="badge badge-neutral w-fit">2</span>
+          <h2 class="font-semibold text-slate-900">Ves todo en el Orquestador</h2>
+          <p class="text-sm text-slate-600">
+            Te llega una URL para abrir el tablero y ver en tiempo real qué mensajes entran, a qué proyecto
+            pertenecen y qué queda pendiente.
+          </p>
+        </div>
+      </article>
+      <article class="card border border-base-300 bg-base-100 shadow-sm">
+        <div class="card-body p-4">
+          <span class="badge badge-neutral w-fit">3</span>
+          <h2 class="font-semibold text-slate-900">Respondés como vendedor y coordinás visita</h2>
+          <p class="text-sm text-slate-600">
+            Desde el tablero proponés días y horarios de visita. El cliente elige una opción y queda confirmada,
+            con registro y trazabilidad.
+          </p>
+        </div>
+      </article>
+    </div>
+
+    <a href={boardUrl} class="btn btn-outline btn-secondary w-full min-h-11 md:w-auto">
+      Entrar al tablero (cliente demo)
+    </a>
+  </section>
+</BaseLayout>
