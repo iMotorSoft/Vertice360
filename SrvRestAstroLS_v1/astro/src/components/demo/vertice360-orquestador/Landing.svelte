@@ -43,7 +43,7 @@
   </div>
 
   <h2 class="text-base md:text-lg font-semibold text-slate-900 mb-3">
-    De un mensaje a una visita confirmada (en vivo):
+    De un mensaje a una visita confirmada y al cierre de venta (en vivo):
   </h2>
 
   <div class="grid gap-3 md:grid-cols-3">
