@@ -187,6 +187,15 @@ export function createStudioState() {
       return;
     }
 
+    if (eventType === "human.action_required") {
+      if (payload?.ticket_id) {
+        activeTicketId = payload.ticket_id;
+      } else if (payload?.ticketId) {
+        activeTicketId = payload.ticketId;
+      }
+      return;
+    }
+
     if (!eventType.startsWith("ai_workflow.")) return;
 
     const runId = getRunId(payload, evt);

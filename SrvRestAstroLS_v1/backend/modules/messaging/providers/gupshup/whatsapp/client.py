@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
+import time
 from typing import Any
 
 import httpx
 import globalVar
 MESSAGE_PATH = "/wa/api/v1/msg"
 MAX_ERROR_BODY_CHARS = 2000
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -62,7 +65,15 @@ class GupshupWhatsAppClient:
         }
 
         async def _post(http_client: httpx.AsyncClient) -> dict[str, Any]:
+            started_at = time.perf_counter()
             response = await http_client.post(url, data=_encode_payload(payload), headers=headers, timeout=20.0)
+            duration_ms = int((time.perf_counter() - started_at) * 1000)
+            logger.info(
+                "GUPSHUP_HTTP_SEND url=%s status=%s duration_ms=%s",
+                url,
+                response.status_code,
+                duration_ms,
+            )
             if response.status_code >= 400:
                 raise GupshupHTTPError(
                     status_code=response.status_code,

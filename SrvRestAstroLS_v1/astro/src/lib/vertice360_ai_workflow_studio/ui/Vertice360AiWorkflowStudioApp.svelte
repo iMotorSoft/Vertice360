@@ -32,6 +32,9 @@
         if (evt.type && evt.type.startsWith("messaging.")) {
           studio.applySseEvent(evt);
         }
+        if (evt.type === "human.action_required") {
+          studio.applySseEvent(evt);
+        }
       },
       onMeta: studio.noteSseEvent,
       onStatus: studio.setConnectionStatus,

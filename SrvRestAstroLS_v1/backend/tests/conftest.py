@@ -22,8 +22,10 @@ _ORIGINAL_RUN_AI_WORKFLOW_REPLY = services._run_ai_workflow_reply
 @pytest.fixture(autouse=True)
 def reset_workflow_store():
     store.reset_store()
+    services.reset_inbound_dedupe_cache()
     yield
     store.reset_store()
+    services.reset_inbound_dedupe_cache()
 
 
 @pytest.fixture(autouse=True)

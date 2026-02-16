@@ -11,6 +11,7 @@ RUN_STEP = "ai_workflow.run.step"
 RUN_COMPLETED = "ai_workflow.run.completed"
 RUN_FAILED = "ai_workflow.run.failed"
 WORKFLOW_RESET = "ai_workflow.workflow.reset"
+HUMAN_ACTION_REQUIRED = "human.action_required"
 MAX_STEP_SUMMARY = 160
 
 
@@ -90,3 +91,22 @@ async def emit_run_failed(run_id: str, error: str, at: int) -> None:
 async def emit_workflow_reset(reason: str) -> None:
     value = {"reason": reason, "at": _epoch_ms()}
     await emit_event(WORKFLOW_RESET, None, value)
+
+
+async def emit_human_action_required(
+    run_id: str | None,
+    *,
+    reason: str,
+    summary: dict[str, Any],
+    suggested_next_message: str,
+    ticket_id: str | None = None,
+    provider: str | None = None,
+) -> None:
+    value = {
+        "reason": reason,
+        "summary": summary or {},
+        "suggested_next_message": suggested_next_message,
+        "ticket_id": ticket_id,
+        "provider": provider,
+    }
+    await emit_event(HUMAN_ACTION_REQUIRED, run_id, value)

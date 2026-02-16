@@ -45,7 +45,8 @@ async def _async_test_ars_budget_flow():
     assert t["commercial"]["moneda"] == "ARS"
     
     # Verify next question is about DATE (mudanza), not budget again
-    assert "mudarte" in r3["replyText"].lower() or "cuando" in r3["replyText"].lower()
+    assert "mudanza" in r3["replyText"].lower() or "mes" in r3["replyText"].lower()
+
     
     # 4. "1m pesos" parsing check
     p4, c4 = commercial_memory.parse_budget_currency("1m pesos")

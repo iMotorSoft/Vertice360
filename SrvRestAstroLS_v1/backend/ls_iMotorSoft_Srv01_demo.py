@@ -78,4 +78,13 @@ if __name__ == "__main__":
     import uvicorn
 
     globalVar.boot_log()
-    uvicorn.run(app, host=globalVar.HOST, port=globalVar.PORT)
+    workers = max(1, int(getattr(globalVar, "UVICORN_WORKERS", 1)))
+    if workers > 1:
+        uvicorn.run(
+            "backend.ls_iMotorSoft_Srv01_demo:app",
+            host=globalVar.HOST,
+            port=globalVar.PORT,
+            workers=workers,
+        )
+    else:
+        uvicorn.run(app, host=globalVar.HOST, port=globalVar.PORT)

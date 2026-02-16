@@ -52,7 +52,8 @@ async def _async_test_commercial_memory_no_repeat_flow():
     # deterministic question: "¿En qué zona o barrio estás buscando?" or combined
     # Since tipologia is also missing, logic says:
     # if zona missing: if tipologia missing -> "Por qué zona buscás y qué tipología...?"
-    assert "¿Por qué zona buscás y qué tipología" in reply1 or "¿En qué zona" in reply1
+    assert "¿Por qué zona buscás y cuántos ambientes necesitás?" in reply1
+
 
     # --- Step 2: User says "Caballito, 3 ambientes" ---
     inbound_2 = {
@@ -88,7 +89,8 @@ async def _async_test_commercial_memory_no_repeat_flow():
     assert ticket["commercial"]["moneda"] == "USD"
     
     # Expect: Ask for Date (Priority 4)
-    assert "cuando" in reply3.lower() or "mudarte" in reply3.lower()
+    assert "mudanza" in reply3.lower()
+
 
     # --- Step 4: User says "marzo" ---
     inbound_4 = {
@@ -102,6 +104,7 @@ async def _async_test_commercial_memory_no_repeat_flow():
     
     # Check memory update
     assert ticket["commercial"]["fecha_mudanza"] == "marzo"
+
     
     # Expect: No missing slots -> Summary close
     assert "Gracias. Tengo:" in reply4
@@ -154,7 +157,10 @@ async def _async_test_ticket_reuse():
     t2 = store._find_active_ticket_by_phone(sender)
     
     assert t1["ticketId"] == t2["ticketId"]
-    assert len(t1["messages"]) == 4
+    # 2 inbound + 1 outbound (second outbound is deduped)
+    assert len(t1["messages"]) == 3
+    outbound = [m for m in t1["messages"] if m.get("direction") == "outbound"]
+    assert len(outbound) == 1
 
 def test_ticket_reuse():
     asyncio.run(_async_test_ticket_reuse())

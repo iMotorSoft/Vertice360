@@ -62,6 +62,10 @@ async def run_workflow(
         "input": input_text,
         "mode": mode,
     }
+    if isinstance(metadata, dict):
+        ticket_id = metadata.get("ticketId")
+        if ticket_id:
+            state["ticket_id"] = str(ticket_id)
     if isinstance(context, dict):
         intent_hint = context.get("intentHint") or context.get("intent") or context.get("primaryIntentLocked")
         if intent_hint:
@@ -69,6 +73,9 @@ async def run_workflow(
         commercial_slots = context.get("commercialSlots") or context.get("commercial_slots")
         if isinstance(commercial_slots, dict):
             state["commercial_slots"] = commercial_slots
+        provider = context.get("provider")
+        if provider:
+            state["provider"] = str(provider)
     try:
         final_state = await workflow_graph.ainvoke(state)
     except Exception as exc:
@@ -105,6 +112,8 @@ async def run_workflow(
         "commercial": final_state.get("commercial_slots") or final_state.get("commercial"),
         "summary": final_state.get("summary"),
         "nextActionQuestion": final_state.get("next_action_question"),
+        "handoffRequired": bool(final_state.get("handoff_required")),
+        "humanActionRequired": final_state.get("human_action_required"),
     }
     completed = store.complete_run(run_id, output)
     await events.emit_run_completed(run_id, output, completed.get("endedAt") or _epoch_ms())

@@ -1,6 +1,10 @@
 <script>
-  import { sendReply } from "../api";
+  import { sendOperatorWhatsApp, sendReply } from "../api";
   import { statusLabel, statusTone } from "../types";
+
+  const OPERATOR_NAME_KEY = "v360_operator_name";
+  const OPERATOR_TEMPLATE =
+    "Para Palermo 3 ambientes, tengo estas opciones para coordinar:\nMar 11/2 10–12 o 16–18\nMié 12/2 11–13 o 15–17\nJue 13/2 9–11 o 17–19\n¿Cuál te sirve? Si preferís, decime 2 franjas y lo confirmo.";
 
   let { run = null, events = [], activeTicketId = null } = $props();
 
@@ -14,6 +18,14 @@
   let providerContextTicketId = $state(null);
   let copied = $state(false);
   let nbqCopied = $state(false);
+
+  let showOperatorModal = $state(false);
+  let operatorName = $state("");
+  let operatorMessageDraft = $state(OPERATOR_TEMPLATE);
+  let operatorProvider = $state("meta");
+  let operatorSending = $state(false);
+  let operatorErrorInfo = $state(null);
+  let toast = $state(null);
 
   const output = $derived(run?.output || {});
   const pragmatics = $derived(output?.pragmatics || {});
@@ -136,22 +148,49 @@
       .toString()
       .trim()
       .toLowerCase();
-    if (!raw) return null;
-    if (raw === "gupshup" || raw === "gupshup_whatsapp" || raw.startsWith("gupshup")) {
-      return "gupshup";
-    }
-    if (raw === "meta" || raw === "meta_whatsapp" || raw.startsWith("meta")) {
-      return "meta";
-    }
-    return null;
+    return normalizeProvider(raw);
   });
 
+  const humanActionRequired = $derived.by(() => {
+    const list = (events || []).filter((event) => event?.name === "human.action_required");
+    if (!list.length) return null;
+    if (activeTicketId) {
+      const match = list.find((event) => {
+        const ticketId = event?.data?.ticket_id || event?.data?.ticketId;
+        return ticketId === activeTicketId || event?.correlationId === activeTicketId;
+      });
+      if (match?.data) return match.data;
+    }
+    return list[0]?.data || null;
+  });
+
+  const handoffTicketId = $derived.by(
+    () => humanActionRequired?.ticket_id || humanActionRequired?.ticketId || activeTicketId || null,
+  );
+  const humanActionProvider = $derived.by(() => normalizeProvider(humanActionRequired?.provider || ""));
+  const humanActionSummary = $derived.by(() => humanActionRequired?.summary || {});
+  const canSendOperator = $derived(
+    Boolean(handoffTicketId && replyTo && operatorName.trim() && operatorMessageDraft.trim() && !operatorSending),
+  );
   const currentText = $derived(editing ? draft : responseText);
 
   $effect(() => {
     if (!editing) {
       draft = responseText || "";
     }
+  });
+
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    if (!operatorName.trim()) {
+      operatorName = window.localStorage.getItem(OPERATOR_NAME_KEY) || "";
+    }
+  });
+
+  $effect(() => {
+    if (typeof window === "undefined") return;
+    if (!operatorName.trim()) return;
+    window.localStorage.setItem(OPERATOR_NAME_KEY, operatorName.trim());
   });
 
   $effect(() => {
@@ -162,9 +201,10 @@
   });
 
   $effect(() => {
-    if (!detectedProvider || providerLockedByUser) return;
-    if (sendProvider !== detectedProvider) {
-      sendProvider = detectedProvider;
+    const providerHint = detectedProvider || humanActionProvider;
+    if (!providerHint || providerLockedByUser) return;
+    if (sendProvider !== providerHint) {
+      sendProvider = providerHint;
     }
   });
 
@@ -201,6 +241,14 @@
     }
   };
 
+  const pushToast = (message, tone = "info") => {
+    const id = Date.now() + Math.random();
+    toast = { id, message, tone };
+    setTimeout(() => {
+      if (toast?.id === id) toast = null;
+    }, 3600);
+  };
+
   const handleSend = async () => {
     if (!canSend || sending) return;
     sending = true;
@@ -224,6 +272,63 @@
     }
     editing = false;
   };
+
+  const openOperatorModal = () => {
+    operatorErrorInfo = null;
+    operatorMessageDraft = OPERATOR_TEMPLATE;
+    operatorProvider = humanActionProvider || sendProvider || "meta";
+    showOperatorModal = true;
+  };
+
+  const closeOperatorModal = () => {
+    showOperatorModal = false;
+    operatorErrorInfo = null;
+    operatorSending = false;
+  };
+
+  const handleSendOperator = async () => {
+    if (!canSendOperator) return;
+    operatorSending = true;
+    operatorErrorInfo = null;
+    const result = await sendOperatorWhatsApp({
+      provider: operatorProvider,
+      to: replyTo,
+      text: operatorMessageDraft.trim(),
+      operatorName: operatorName.trim(),
+      ticketId: handoffTicketId,
+    });
+    operatorSending = false;
+    if (!result.ok) {
+      operatorErrorInfo = {
+        provider: result.provider || operatorProvider,
+        upstreamStatus: result.upstreamStatus ?? null,
+        message: result.error || "No se pudo enviar por WhatsApp",
+      };
+      const details = `provider=${operatorErrorInfo.provider} upstream_status=${operatorErrorInfo.upstreamStatus ?? "n/a"} ${operatorErrorInfo.message}`;
+      pushToast(details, "error");
+      return;
+    }
+    pushToast("Propuesta de horarios enviada por WhatsApp.", "success");
+    showOperatorModal = false;
+  };
+
+  function normalizeProvider(raw) {
+    const value = (raw || "").toString().trim().toLowerCase();
+    if (!value) return null;
+    if (value === "gupshup" || value === "gupshup_whatsapp" || value.startsWith("gupshup") || value === "gs") {
+      return "gupshup";
+    }
+    if (value === "meta" || value === "meta_whatsapp" || value.startsWith("meta") || value === "wa_meta") {
+      return "meta";
+    }
+    return null;
+  }
+
+  function toastToneClass(tone) {
+    if (tone === "success") return "alert-success";
+    if (tone === "error") return "alert-error";
+    return "alert-info";
+  }
 
   function formatList(value) {
     if (!value) return [];
@@ -314,6 +419,33 @@
           </div>
         {:else if sendError}
           <p class="text-xs text-error">{sendError}</p>
+        {/if}
+        {#if humanActionRequired?.reason === "schedule_visit"}
+          <div class="rounded-2xl border border-amber-300 bg-amber-50/90 p-4 min-w-0">
+            <div class="flex flex-wrap items-center justify-between gap-2 min-w-0">
+              <div>
+                <p class="text-xs uppercase tracking-[0.2em] text-amber-700">
+                  Acción humana requerida
+                </p>
+                <p class="text-sm font-semibold text-amber-900">Coordinar visita</p>
+              </div>
+              <span class="badge badge-warning badge-sm">Action Required</span>
+            </div>
+            <div class="mt-3 grid gap-2 text-sm text-amber-900 md:grid-cols-2">
+              <p><strong>Zona:</strong> {humanActionSummary?.zona || "Palermo"}</p>
+              <p><strong>Ambientes:</strong> {humanActionSummary?.ambientes ?? 3}</p>
+              <p><strong>Presupuesto USD:</strong> {humanActionSummary?.presupuesto_usd ?? 120000}</p>
+              <p><strong>Mudanza:</strong> {humanActionSummary?.mudanza || "2026-04"}</p>
+            </div>
+            <div class="mt-4 flex flex-wrap items-center gap-2">
+              <button class="btn btn-warning btn-sm" onclick={openOperatorModal} disabled={!replyTo}>
+                Enviar propuesta de horarios
+              </button>
+              {#if !replyTo}
+                <span class="text-xs text-amber-700">Sin teléfono detectado para envío.</span>
+              {/if}
+            </div>
+          </div>
         {/if}
         {#if editing}
           <textarea
@@ -509,3 +641,67 @@
     {/if}
   </div>
 </div>
+
+{#if showOperatorModal}
+  <div class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/45 p-4">
+    <div class="w-full max-w-2xl rounded-3xl border border-base-300 bg-base-100 p-5 shadow-2xl">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Coordinar visita</p>
+          <h4 class="text-lg font-semibold text-slate-900">Enviar propuesta de horarios</h4>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick={closeOperatorModal}>Cerrar</button>
+      </div>
+
+      <div class="mt-4 grid gap-4 md:grid-cols-2">
+        <label class="form-control">
+          <span class="label-text text-xs text-slate-600">Nombre operador</span>
+          <input class="input input-bordered input-sm" bind:value={operatorName} placeholder="Ej: Laura" />
+        </label>
+        <label class="form-control">
+          <span class="label-text text-xs text-slate-600">Provider</span>
+          <select class="select select-bordered select-sm" bind:value={operatorProvider}>
+            <option value="meta">meta</option>
+            <option value="gupshup">gupshup</option>
+          </select>
+        </label>
+      </div>
+
+      <label class="form-control mt-4">
+        <span class="label-text text-xs text-slate-600">Mensaje (editable)</span>
+        <textarea
+          class="textarea textarea-bordered min-h-[180px] text-sm leading-relaxed"
+          bind:value={operatorMessageDraft}
+        ></textarea>
+      </label>
+
+      <div class="mt-2 text-xs text-slate-500">
+        <span>to: {replyTo || "--"} </span>
+        <span class="ml-3">ticket: {handoffTicketId || "--"}</span>
+      </div>
+
+      {#if operatorErrorInfo}
+        <div role="alert" class="alert alert-error mt-4 py-2 px-3 text-xs">
+          <span>provider: {operatorErrorInfo.provider}</span>
+          <span>upstream_status: {operatorErrorInfo.upstreamStatus ?? "n/a"}</span>
+          <span>{operatorErrorInfo.message}</span>
+        </div>
+      {/if}
+
+      <div class="mt-4 flex justify-end gap-2">
+        <button class="btn btn-ghost btn-sm" onclick={closeOperatorModal}>Cancelar</button>
+        <button class="btn btn-primary btn-sm" onclick={handleSendOperator} disabled={!canSendOperator}>
+          {operatorSending ? "Enviando..." : "Enviar propuesta"}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if toast}
+  <div class="toast toast-top toast-end z-50">
+    <div class={`alert ${toastToneClass(toast.tone)} shadow-lg`}>
+      <span>{toast.message}</span>
+    </div>
+  </div>
+{/if}

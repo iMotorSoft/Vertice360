@@ -35,7 +35,8 @@ async def _async_test_move_in_parsing_and_memory():
     r1 = await services.process_inbound_message({"text": "busco depto", "from": sender, "messageId": "1"})
     t = store._find_active_ticket_by_phone(sender)
     assert t is not None
-    assert "¿En qué zona o barrio" in r1["replyText"] or "zona" in r1["replyText"].lower()
+    assert "¿Por qué zona buscás" in r1["replyText"] or "zona" in r1["replyText"].lower()
+
 
     # b) "Caballito, 3 ambientes"
     r2 = await services.process_inbound_message({"text": "Caballito, 3 ambientes", "from": sender, "messageId": "2"})
@@ -46,7 +47,8 @@ async def _async_test_move_in_parsing_and_memory():
     # c) "USD 120k"
     r3 = await services.process_inbound_message({"text": "USD 120k", "from": sender, "messageId": "3"})
     assert t["commercial"]["presupuesto"] == 120000
-    assert "mudarte" in r3["replyText"].lower()
+    assert "mudanza" in r3["replyText"].lower()
+
 
     # d) "mediados de febrero"
     r4 = await services.process_inbound_message({"text": "mediados de febrero", "from": sender, "messageId": "4"})

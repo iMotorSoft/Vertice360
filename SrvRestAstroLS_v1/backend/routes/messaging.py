@@ -2,7 +2,9 @@ from typing import Dict, Any
 import hashlib
 import hmac
 import json
+import logging
 import time
+import unicodedata
 import uuid
 
 from litestar import Router, post, get, Controller, Request
@@ -33,6 +35,11 @@ from backend.modules.messaging.providers.registry import normalize_provider
 from backend.modules.agui_stream import broadcaster
 from backend.modules.vertice360_ai_workflow_demo.bridge import maybe_start_ai_workflow_from_inbound
 from backend.modules.vertice360_workflow_demo.services import process_inbound_message
+from backend.modules.vertice360_workflow_demo import events as workflow_events
+from backend.modules.vertice360_workflow_demo import store as workflow_store
+
+logger = logging.getLogger(__name__)
+
 
 class MessagingController(Controller):
     path = "/api/v1/messaging"
@@ -43,11 +50,45 @@ class MessagingController(Controller):
     # async def send_v1(self, data: Dict[str, Any]) -> Dict[str, Any]:
     #     ...
 
-class DemoMessagingController(Controller):
-    path = "/api/demo/messaging"
-    tags = ["Demo Messaging"]
 
-    async def _send_gupshup_whatsapp(self, to: str, text: str) -> Response:
+def _normalize_for_match(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", text)
+    stripped = "".join(char for char in normalized if not unicodedata.combining(char))
+    return " ".join(stripped.lower().split())
+
+
+def _operator_intro(operator_name: str) -> str:
+    return f"Hola, soy {operator_name}, del equipo de visitas de Vértice360.\n"
+
+
+def _with_operator_intro(text: str, operator_name: str) -> str:
+    clean_text = str(text or "").strip()
+    if not clean_text:
+        return _operator_intro(operator_name)
+    normalized = _normalize_for_match(clean_text)
+    if "hola, soy" in normalized and "equipo de visitas de vertice360" in normalized:
+        return clean_text
+    return f"{_operator_intro(operator_name)}{clean_text}"
+
+
+def _extract_gupshup_inbound_text(payload: dict[str, Any]) -> str:
+    body = payload.get("payload") if isinstance(payload.get("payload"), dict) else {}
+    body_type = str(body.get("type") or "").strip().lower()
+    if body_type != "text":
+        return ""
+
+    nested = body.get("payload")
+    if isinstance(nested, dict):
+        text = nested.get("text") or nested.get("body")
+    else:
+        text = body.get("text") or body.get("body")
+    return str(text or "").strip()
+
+
+async def _send_whatsapp_unified_payload(provider: str, to: str, text: str) -> tuple[int, Dict[str, Any]]:
+    resolved_provider = normalize_provider(provider)
+
+    if resolved_provider == "gupshup":
         config = GupshupConfig.from_env()
         env_debug = {
             "has_api_key": bool(config.api_key),
@@ -55,7 +96,6 @@ class DemoMessagingController(Controller):
             "has_src_number": bool(config.src_number),
             "base_url": config.base_url,
         }
-
         if not globalVar.gupshup_whatsapp_enabled():
             payload = {
                 "ok": False,
@@ -70,45 +110,71 @@ class DemoMessagingController(Controller):
                 },
                 "env": env_debug,
             }
-            return Response(status_code=502, content=payload, media_type=MediaType.JSON)
+            return 502, payload
 
         client = GupshupWhatsAppClient(config)
         service = GupshupWhatsAppService(client)
-
         try:
             ack = await service.send_text_message(to, text)
-            result: Dict[str, Any] = {
+            message_id = str(ack.provider_message_id or f"gs-{uuid.uuid4().hex[:12]}")
+            return 200, {
                 "ok": True,
                 "provider": "gupshup",
-                "message_id": ack.provider_message_id,
+                "message_id": message_id,
                 "raw": ack.raw,
             }
         except (GupshupWhatsAppSendError, GupshupHTTPError, ValueError, Exception) as exc:
-            error_payload = _build_gupshup_error_payload(exc)
             payload = {
                 "ok": False,
                 "provider": "gupshup",
-                "error": error_payload,
+                "error": _build_gupshup_error_payload(exc),
                 "env": env_debug,
             }
-            return Response(status_code=502, content=payload, media_type=MediaType.JSON)
+            return 502, payload
 
-        value = _compact_value(
-            {
-                "provider": "gupshup",
-                "service": "whatsapp",
-                "to": to,
-                "text": text,
-                "message_id": result.get("message_id"),
-                "result": result,
-            }
-        )
-        correlation_id = result.get("message_id")
-        await broadcaster.publish(
-            "messaging.outbound",
-            _custom_event("messaging.outbound", value, correlation_id),
-        )
+    try:
+        raw = await send_text_message(to, text)
+    except MetaWhatsAppSendError as exc:
+        return 502, {"ok": False, "provider": "meta", "error": _build_meta_error_payload(exc)}
+    except ValueError as exc:
+        return 502, {"ok": False, "provider": "meta", "error": _build_meta_error_payload(exc)}
+    except Exception as exc:  # noqa: BLE001 - explicit payload for demo diagnostics
+        return 502, {"ok": False, "provider": "meta", "error": _build_meta_error_payload(exc)}
 
+    message_id = _extract_provider_message_id(raw) or f"meta-{uuid.uuid4().hex[:12]}"
+    return 200, {"ok": True, "provider": "meta", "message_id": message_id, "raw": raw}
+
+
+async def _emit_generic_outbound(provider: str, to: str, text: str, result: Dict[str, Any], correlation_id: str | None = None) -> None:
+    value = _compact_value(
+        {
+            "provider": provider,
+            "service": "whatsapp",
+            "to": to,
+            "text": text,
+            "message_id": result.get("message_id"),
+            "result": result,
+        }
+    )
+    await broadcaster.publish(
+        "messaging.outbound",
+        _custom_event("messaging.outbound", value, correlation_id or result.get("message_id")),
+    )
+
+
+def _workflow_provider(provider: str) -> str:
+    return "gupshup_whatsapp" if provider == "gupshup" else "meta_whatsapp"
+
+
+class DemoMessagingController(Controller):
+    path = "/api/demo/messaging"
+    tags = ["Demo Messaging"]
+
+    async def _send_gupshup_whatsapp(self, to: str, text: str) -> Response:
+        status_code, result = await _send_whatsapp_unified_payload("gupshup", to, text)
+        if status_code != 200:
+            return Response(status_code=status_code, content=result, media_type=MediaType.JSON)
+        await _emit_generic_outbound("gupshup", to, text, result)
         return Response(status_code=200, content=result, media_type=MediaType.JSON)
 
     @post("/whatsapp/send", status_code=200)
@@ -127,46 +193,10 @@ class DemoMessagingController(Controller):
         if provider == "gupshup":
             return await self._send_gupshup_whatsapp(to, text)
 
-        try:
-            raw = await send_text_message(to, text)
-        except MetaWhatsAppSendError as exc:
-            payload = {
-                "ok": False,
-                "provider": "meta",
-                "error": _build_meta_error_payload(exc),
-            }
-            return Response(status_code=502, content=payload, media_type=MediaType.JSON)
-        except ValueError as exc:
-            payload = {
-                "ok": False,
-                "provider": "meta",
-                "error": _build_meta_error_payload(exc),
-            }
-            return Response(status_code=502, content=payload, media_type=MediaType.JSON)
-        except Exception as exc:  # noqa: BLE001 - explicit payload for demo diagnostics
-            payload = {
-                "ok": False,
-                "provider": "meta",
-                "error": _build_meta_error_payload(exc),
-            }
-            return Response(status_code=502, content=payload, media_type=MediaType.JSON)
-
-        result = {
-            "ok": True,
-            "provider": "meta",
-            "message_id": _extract_provider_message_id(raw),
-            "raw": raw,
-        }
-        await broadcaster.publish(
-            "messaging.outbound",
-            {
-                "provider": "meta",
-                "service": "whatsapp",
-                "to": to,
-                "text": text,
-                "result": result,
-            },
-        )
+        status_code, result = await _send_whatsapp_unified_payload(provider, to, text)
+        if status_code != 200:
+            return Response(status_code=status_code, content=result, media_type=MediaType.JSON)
+        await _emit_generic_outbound("meta", to, text, result)
         return Response(status_code=200, content=result, media_type=MediaType.JSON)
 
     @post("/meta/whatsapp/send")
@@ -216,6 +246,78 @@ class DemoMessagingController(Controller):
         if not to or not text:
             raise HTTPException(status_code=400, detail="Missing 'to' or 'text' in body")
         return await self._send_gupshup_whatsapp(to, text)
+
+
+class OperatorWorkflowController(Controller):
+    path = "/api/demo/workflow/operator"
+    tags = ["Demo Workflow Operator"]
+
+    @post("/send_whatsapp", status_code=200)
+    async def send_whatsapp(self, data: Dict[str, Any]) -> Response:
+        provider = normalize_provider(data.get("provider"))
+        to = str(data.get("to") or "").strip()
+        text = str(data.get("text") or "").strip()
+        operator_name = str(data.get("operator_name") or "").strip()
+        ticket_id = str(data.get("ticket_id") or data.get("ticketId") or "").strip() or None
+
+        if not to or not text or not operator_name:
+            raise HTTPException(status_code=400, detail="Missing 'to', 'text' or 'operator_name' in body")
+
+        outbound_text = _with_operator_intro(text, operator_name)
+        status_code, result = await _send_whatsapp_unified_payload(provider, to, outbound_text)
+        if status_code != 200:
+            return Response(status_code=status_code, content=result, media_type=MediaType.JSON)
+
+        resolved_provider = result.get("provider") or provider or "meta"
+        message_id = str(result.get("message_id") or f"operator-{uuid.uuid4().hex[:12]}")
+        result["message_id"] = message_id
+
+        if ticket_id:
+            ticket = workflow_store.tickets.get(ticket_id)
+            if ticket:
+                channel = ticket.get("channel") or "whatsapp"
+                workflow_provider = ticket.get("provider") or _workflow_provider(str(resolved_provider))
+                await workflow_events.emit_messaging_outbound(
+                    ticket_id=ticket_id,
+                    provider=workflow_provider,
+                    channel=channel,
+                    messageId=message_id,
+                    to=to,
+                    text=outbound_text,
+                    sentAt=_epoch_ms(),
+                )
+                workflow_store.add_message(
+                    ticket_id,
+                    {
+                        "direction": "outbound",
+                        "provider": workflow_provider,
+                        "channel": channel,
+                        "messageId": message_id,
+                        "text": outbound_text,
+                        "at": _epoch_ms(),
+                        "mediaCount": 0,
+                        "operatorName": operator_name,
+                    },
+                )
+                workflow_store.set_handoff_stage(ticket_id, "operator_engaged", operator_name)
+            else:
+                await _emit_generic_outbound(
+                    str(resolved_provider),
+                    to,
+                    outbound_text,
+                    result,
+                    correlation_id=ticket_id,
+                )
+        else:
+            await _emit_generic_outbound(str(resolved_provider), to, outbound_text, result)
+
+        payload = {
+            "ok": True,
+            "provider": resolved_provider,
+            "message_id": message_id,
+            "raw": result.get("raw"),
+        }
+        return Response(status_code=200, content=payload, media_type=MediaType.JSON)
 
 
 def _epoch_ms() -> int:
@@ -446,6 +548,12 @@ class MetaWhatsAppWebhookController(Controller):
                 ai_result = await maybe_start_ai_workflow_from_inbound(message, broadcaster, tenant_ctx)
                 if ai_result and ai_result.get("responseText"):
                     wf_inbound["aiResponseText"] = ai_result["responseText"]
+                if ai_result and ai_result.get("decision"):
+                    wf_inbound["aiDecision"] = ai_result["decision"]
+                if ai_result and ai_result.get("handoffRequired") is not None:
+                    wf_inbound["aiHandoffRequired"] = bool(ai_result.get("handoffRequired"))
+                if ai_result and isinstance(ai_result.get("humanActionRequired"), dict):
+                    wf_inbound["humanActionRequired"] = ai_result["humanActionRequired"]
                 wf_result = await process_inbound_message(wf_inbound)
                 ticket_id = wf_result.get("ticketId")
             except Exception as exc:  # noqa: BLE001 - best-effort webhook
@@ -503,25 +611,44 @@ class GupshupWhatsAppWebhookController(Controller):
 
     @post()
     async def receive_webhook(self, request: Request) -> Dict[str, Any]:
-        print("\n" + "="*40)
-        print(f"DEBUG: Gupshup Webhook POST received at {time.strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"DEBUG: Remote IP: {request.client.host if request.client else 'Unknown'}")
-        
+        received_at_ms = _to_epoch_ms(None)
         raw_body = await request.body()
-        body_str = raw_body.decode("utf-8")
-        print(f"DEBUG: Raw Body: {body_str}")
-        print(f"DEBUG: Headers: {dict(request.headers)}")
-
         try:
-            payload = json.loads(body_str)
+            payload = json.loads(raw_body.decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            print(f"DEBUG: JSON Parse Error: {exc}")
             raise HTTPException(status_code=400, detail="Invalid JSON") from exc
+
+        event_type = str(payload.get("type") or "").strip().lower()
+        gupshup_app = str(payload.get("app") or "").strip() or None
+        logger.info(
+            "GUPSHUP_WEBHOOK_RECEIVED received_at_ms=%s remote_ip=%s event_type=%s app=%s",
+            received_at_ms,
+            request.client.host if request.client else "-",
+            event_type or "-",
+            gupshup_app or "-",
+        )
+        if event_type != "message":
+            logger.info("GUPSHUP_WEBHOOK ignored event_type=%s reason=non_inbound", event_type or "-")
+            return {"ok": True}
+
+        inbound_text = _extract_gupshup_inbound_text(payload)
+        if not inbound_text:
+            payload_type = ""
+            if isinstance(payload.get("payload"), dict):
+                payload_type = str(payload["payload"].get("type") or "").strip().lower()
+            logger.info(
+                "GUPSHUP_WEBHOOK ignored event_type=%s payload_type=%s reason=non_text_or_empty",
+                event_type,
+                payload_type or "-",
+            )
+            return {"ok": True}
 
         inbound_messages = gupshup_parse_inbound(payload)
         status_updates = gupshup_parse_status(payload)
 
         for message in inbound_messages:
+            message_id = message.message_id or f"gupshup-noid-{uuid.uuid4().hex[:8]}"
+            correlation_id = f"gupshup_whatsapp:{message_id}"
             value = _compact_value(
                 {
                     "provider": message.provider,
@@ -531,58 +658,59 @@ class GupshupWhatsAppWebhookController(Controller):
                     "to": message.to,
                     "text": message.text,
                     "timestamp": message.timestamp,
-                    "message_id": message.message_id,
+                    "message_id": message_id,
                     "raw": message.raw,
                 }
             )
 
-            # Tenant context
-            tenant_ctx = {
-                "tenant_id": request.scope.get("tenant_id"),
-                "tenant_host": request.scope.get("tenant_host"),
-            }
-            if not tenant_ctx["tenant_id"] and not tenant_ctx["tenant_host"]:
-                tenant_ctx = None
-
-            # 1. Trigger AI Workflow / Ticket
             ticket_id = None
-            
-            # Sanitize phone numbers (remove + and other non-digits)
             sanitized_from = "".join(filter(str.isdigit, message.from_ or message.wa_id or ""))
             sanitized_to = "".join(filter(str.isdigit, message.to or ""))
 
             wf_inbound = {
                 "provider": "gupshup_whatsapp",
+                "app": gupshup_app,
                 "channel": "whatsapp",
                 "from": sanitized_from,
                 "to": sanitized_to,
-                "messageId": message.message_id or "",
+                "messageId": message_id,
                 "text": message.text or "",
                 "timestamp": _to_epoch_ms(message.timestamp),
                 "mediaCount": 0,
             }
-            
+            logger.info(
+                "GUPSHUP_INBOUND_ACCEPTED correlation_id=%s received_at_ms=%s message_id=%s user_phone=%s",
+                correlation_id,
+                wf_inbound["timestamp"],
+                message_id,
+                sanitized_from,
+            )
+
             try:
-                # Adapt for AI bridge
-                ai_input = {
-                    "text": message.text,
-                    "message_id": message.message_id,
-                    "from": sanitized_from,
-                    "raw": message.raw,
-                }
-                ai_result = await maybe_start_ai_workflow_from_inbound(ai_input, broadcaster, tenant_ctx)
-                if ai_result and ai_result.get("responseText"):
-                    wf_inbound["aiResponseText"] = ai_result["responseText"]
-                
-                # Ticket creation
+                wf_started_at = time.perf_counter()
                 wf_result = await process_inbound_message(wf_inbound)
+                workflow_ms = int((time.perf_counter() - wf_started_at) * 1000)
                 ticket_id = wf_result.get("ticketId")
+                logger.info(
+                    "GUPSHUP_INBOUND_PROCESSED correlation_id=%s ticket_id=%s workflow_ms=%s duplicate=%s actions=%s",
+                    correlation_id,
+                    ticket_id or "-",
+                    workflow_ms,
+                    bool(wf_result.get("duplicate")),
+                    wf_result.get("actions") or [],
+                )
             except Exception as exc:  # noqa: BLE001
-                print(f"ERROR: Gupshup workflow trigger failed: {exc}")
+                logger.exception(
+                    "GUPSHUP_INBOUND_FAILED correlation_id=%s message_id=%s user_phone=%s error=%s",
+                    correlation_id,
+                    message_id,
+                    sanitized_from,
+                    exc,
+                )
                 error_value = _compact_value(
                     {
                         "ticketId": wf_inbound.get("ticketId"),
-                        "messageId": message.message_id,
+                        "messageId": message_id,
                         "from": message.from_,
                         "error": str(exc),
                     }
@@ -592,14 +720,13 @@ class GupshupWhatsAppWebhookController(Controller):
                     _custom_event("workflow.error", error_value, ticket_id or "workflow"),
                 )
 
-            # 2. Broadcast raw event
             await broadcaster.publish(
                 "messaging.inbound",
-                _custom_event("messaging.inbound", value, message.message_id),
+                _custom_event("messaging.inbound", value, message_id),
             )
             await broadcaster.publish(
                 "messaging.inbound.raw",
-                _custom_event("messaging.inbound.raw", value, message.message_id),
+                _custom_event("messaging.inbound.raw", value, message_id),
             )
 
         for status in status_updates:
@@ -626,6 +753,7 @@ messaging_router = Router(
     route_handlers=[
         MessagingController,
         DemoMessagingController,
+        OperatorWorkflowController,
         MetaWhatsAppWebhookController,
         GupshupWhatsAppWebhookController,
     ],

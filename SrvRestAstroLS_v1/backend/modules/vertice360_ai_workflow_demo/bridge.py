@@ -83,6 +83,7 @@ async def maybe_start_ai_workflow_from_inbound(
     if not run_id:
         return None
     response_text = None
+    output = None
     if isinstance(run, dict):
         output = run.get("output")
         if isinstance(output, dict):
@@ -90,4 +91,11 @@ async def maybe_start_ai_workflow_from_inbound(
     payload = {"runId": run_id}
     if response_text:
         payload["responseText"] = response_text
+    if isinstance(output, dict):
+        if output.get("decision"):
+            payload["decision"] = output.get("decision")
+        if output.get("handoffRequired") is not None:
+            payload["handoffRequired"] = bool(output.get("handoffRequired"))
+        if isinstance(output.get("humanActionRequired"), dict):
+            payload["humanActionRequired"] = output.get("humanActionRequired")
     return payload

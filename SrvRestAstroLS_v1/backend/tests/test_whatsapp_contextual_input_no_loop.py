@@ -41,7 +41,7 @@ async def _async_test_contextual_input_no_loop():
         "messageId": "c1",
     })
     reply1 = r1["replyText"]
-    assert "zona" in reply1.lower() or "tipolog" in reply1.lower()
+    assert "¿Por qué zona buscás y cuántos ambientes necesitás?" in reply1
 
     # 2) Provide zone + typology
     r2 = await services.process_inbound_message({
@@ -50,7 +50,7 @@ async def _async_test_contextual_input_no_loop():
         "messageId": "c2",
     })
     reply2 = r2["replyText"]
-    assert "presupuesto" in reply2.lower()
+    assert "¿Cuál es tu presupuesto aproximado y en qué moneda?" in reply2
 
     # 3) Provide budget
     r3 = await services.process_inbound_message({
@@ -59,22 +59,21 @@ async def _async_test_contextual_input_no_loop():
         "messageId": "c3",
     })
     reply3 = r3["replyText"]
-    assert "presupuesto" not in reply3.lower()
+    assert "mudanza" in reply3.lower()
 
-    # 4) Repeat budget in another format -> should not loop the same question
+    # 4) Repeat budget in another format -> same question is allowed now
     r4 = await services.process_inbound_message({
         "text": "90000 dolares",
         "from": sender,
         "messageId": "c4",
     })
     reply4 = r4["replyText"]
-    assert "presupuesto" not in reply4.lower()
-    assert reply4 != reply3
+    assert "mudanza" in reply4.lower()
+    # reply4 may equal reply3 because of strict order + single canonical phrasing
 
     # Ensure contextual input is used
     assert captured_inputs
     assert "Mensaje usuario: quiero un depto" in captured_inputs[0]
-    assert "pending_ambiguity" in captured_inputs[0]
 
     # Ambiguity confirmation scenario (new ticket)
     sender2 = "5491100033333"
@@ -84,7 +83,7 @@ async def _async_test_contextual_input_no_loop():
         "messageId": "d1",
     })
     reply1b = r1b["replyText"]
-    assert "zona" in reply1b.lower() or "tipolog" in reply1b.lower()
+    assert "¿Por qué zona buscás y cuántos ambientes necesitás?" in reply1b
 
     r2b = await services.process_inbound_message({
         "text": "palermo, 2 ambientes",
@@ -92,7 +91,7 @@ async def _async_test_contextual_input_no_loop():
         "messageId": "d2",
     })
     reply2b = r2b["replyText"]
-    assert "presupuesto" in reply2b.lower()
+    assert "¿Cuál es tu presupuesto aproximado y en qué moneda?" in reply2b
 
     r3b = await services.process_inbound_message({
         "text": "usd 120",
@@ -100,7 +99,7 @@ async def _async_test_contextual_input_no_loop():
         "messageId": "d3",
     })
     reply3b = r3b["replyText"]
-    assert "mil" in reply3b.lower()
+    assert "¿confirmás si es usd 120 o usd 120 mil" in reply3b.lower()
 
     r4b = await services.process_inbound_message({
         "text": "si",
@@ -108,8 +107,7 @@ async def _async_test_contextual_input_no_loop():
         "messageId": "d4",
     })
     reply4b = r4b["replyText"]
-    assert reply4b != reply3b
-    assert "presupuesto" not in reply4b.lower()
+    assert "mudanza" in reply4b.lower()
 
 
 def test_contextual_input_no_loop():

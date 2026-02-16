@@ -8,7 +8,13 @@ from typing import Any, TypedDict
 from langgraph.graph import END, StateGraph
 
 from backend import globalVar
-from backend.modules.vertice360_ai_workflow_demo import events, llm_service, mock_data, store, templates
+from backend.modules.vertice360_ai_workflow_demo import (
+    events,
+    llm_service,
+    mock_data,
+    store,
+    templates,
+)
 from backend.modules.vertice360_workflow_demo import commercial_memory
 
 
@@ -53,6 +59,10 @@ class AiWorkflowState(TypedDict, total=False):
     response_model: str | None
     summary: str | None
     next_action_question: str | None
+    ticket_id: str | None
+    provider: str | None
+    handoff_required: bool
+    human_action_required: dict[str, Any] | None
 
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
@@ -72,7 +82,10 @@ AMBIGUOUS_BUDGET_RE = re.compile(
     rf"(?P<cur2>{CURRENCY_HINT_PATTERN})?",
     re.IGNORECASE,
 )
-PRESUPUESTO_RE = re.compile(r"(?:presupuesto|budget)\s*[=:]?\s*(\d[\d.,]*\s*(?:millones|millon|mil|k)?\b)", re.IGNORECASE)
+PRESUPUESTO_RE = re.compile(
+    r"(?:presupuesto|budget)\s*[=:]?\s*(\d[\d.,]*\s*(?:millones|millon|mil|k)?\b)",
+    re.IGNORECASE,
+)
 ADDRESS_RE = re.compile(
     r"\b(?:calle|av\.?|avenida|ruta|direccion)\s+[A-Za-z0-9\s]{3,40}",
     re.IGNORECASE,
@@ -103,17 +116,38 @@ INTENT_PRIORITY = [
     "handoff_agent",
 ]
 INTENT_KEYWORDS = {
-    "property_search": ["depto", "departamento", "ambientes", "ambiente", "unidad", "propiedad", "monoambiente"],
+    "property_search": [
+        "depto",
+        "departamento",
+        "ambientes",
+        "ambiente",
+        "unidad",
+        "propiedad",
+        "monoambiente",
+    ],
     "price": ["precio", "valor", "cuanto", "usd", "ars", "$", "presupuesto"],
     "location": ["ubicacion", "zona", "barrio", "direccion", "donde", "mapa"],
     "visit": ["visita", "ver", "recorrer", "tour", "mostrar", "coordinar"],
-    "docs": ["docs", "documentacion", "documentos", "dni", "cuit", "recibo", "ingresos"],
+    "docs": [
+        "docs",
+        "documentacion",
+        "documentos",
+        "dni",
+        "cuit",
+        "recibo",
+        "ingresos",
+    ],
     "availability": ["disponible", "hay", "quedan", "stock", "unidades"],
     "financing": ["financiacion", "cuotas", "anticipo", "plan", "credito"],
     "handoff_agent": ["humano", "asesor", "llamar", "contacto", "agente"],
 }
 PRAGMATICS_MISSING_SLOTS = {
-    "property_search": ["zona", "tipologia", "presupuesto", "moneda", "fecha_mudanza"],
+    "property_search": [
+        "zona",
+        "tipologia",
+        "presupuesto",
+        "moneda",
+    ],  # fecha_mudanza removed
     "price": ["currency", "budget", "unit"],
     "location": ["project_or_zone"],
     "visit": ["date_range"],
@@ -136,7 +170,18 @@ QUESTION_TOKENS = ("como", "donde", "cuanto")
 GREETING_TOKENS = ("hola", "buenas")
 URGENT_TOKENS = ("ya", "urgente", "hoy", "ahora")
 COMPLAINT_TOKENS = ("mal", "no funciona", "nadie responde")
-COMMERCIAL_SLOT_PRIORITY = ("zona", "tipologia", "presupuesto", "moneda", "fecha_mudanza")
+# Note: fecha_mudanza removed - flow goes directly to handoff after presupuesto
+COMMERCIAL_SLOT_PRIORITY = (
+    "zona",
+    "tipologia",
+    "presupuesto",
+    "moneda",
+)
+SCHEDULE_VISIT_REASON = "schedule_visit"
+SCHEDULE_VISIT_FIXED_REPLY = (
+    "Gracias. En breve te contactaremos para coordinar la visita."
+)
+SCHEDULE_VISIT_SUGGESTED_NEXT_MESSAGE = "Hola, soy {OPERATOR_NAME}... (slots...)"
 
 
 def _epoch_ms() -> int:
@@ -196,25 +241,27 @@ def _build_template_next_best_question(missing_slots: list[str]) -> str:
         return "Que tipologia o cantidad de ambientes buscas?"
     if "presupuesto" in slot_set or "moneda" in slot_set:
         return "Cual es tu presupuesto y en que moneda?"
-    if "fecha_mudanza" in slot_set:
-        return "Para cuando necesitas mudarte?"
+    # Note: fecha_mudanza question removed (flujo simplificado)
     return "Que dato adicional podes compartir para avanzar?"
 
 
-def _build_openai_next_best_question(missing_slots: list[str]) -> tuple[str, str | None]:
+def _build_openai_next_best_question(
+    missing_slots: list[str],
+) -> tuple[str, str | None]:
     try:
         from openai import OpenAI
     except Exception:
         return "", None
 
-    ordered_missing = [slot for slot in COMMERCIAL_SLOT_PRIORITY if slot in missing_slots]
+    ordered_missing = [
+        slot for slot in COMMERCIAL_SLOT_PRIORITY if slot in missing_slots
+    ]
     if not ordered_missing:
         ordered_missing = list(missing_slots)
     missing_text = ", ".join(ordered_missing) if ordered_missing else "zona, tipologia"
 
     system_prompt = (
-        "Sos un asistente inmobiliario. "
-        "Responde con una sola pregunta en espanol."
+        "Sos un asistente inmobiliario. Responde con una sola pregunta en espanol."
     )
     user_prompt = (
         "Genera EXACTAMENTE una pregunta, maximo 140 caracteres, "
@@ -242,12 +289,18 @@ def _build_openai_next_best_question(missing_slots: list[str]) -> tuple[str, str
 
 
 def _build_next_best_question(missing_slots: list[str]) -> tuple[str, bool, str | None]:
-    ordered_missing = [slot for slot in COMMERCIAL_SLOT_PRIORITY if slot in missing_slots]
-    template_question = _build_template_next_best_question(ordered_missing or missing_slots)
+    ordered_missing = [
+        slot for slot in COMMERCIAL_SLOT_PRIORITY if slot in missing_slots
+    ]
+    template_question = _build_template_next_best_question(
+        ordered_missing or missing_slots
+    )
     if not _allow_ai_question():
         return template_question, False, None
     try:
-        question, model = _build_openai_next_best_question(ordered_missing or missing_slots)
+        question, model = _build_openai_next_best_question(
+            ordered_missing or missing_slots
+        )
     except Exception:
         return template_question, False, None
     if question:
@@ -325,7 +378,9 @@ def _slot_has_value(value: Any) -> bool:
     return value not in (None, "", "UNKNOWN")
 
 
-def _missing_slots_from_commercial(commercial_slots: dict[str, Any] | None) -> list[str]:
+def _missing_slots_from_commercial(
+    commercial_slots: dict[str, Any] | None,
+) -> list[str]:
     slots: list[str] = []
     source = commercial_slots if isinstance(commercial_slots, dict) else {}
     for key in COMMERCIAL_SLOT_PRIORITY:
@@ -425,8 +480,106 @@ def _has_any_token(text: str, tokens: tuple[str, ...]) -> bool:
     return any(token in text for token in tokens)
 
 
+def _is_schedule_visit_handoff_trigger(text: str) -> bool:
+    normalized = _strip_accents(str(text or "").lower())
+    if "coordinar visita" in normalized:
+        return True
+    return "visita" in normalized and "dia" in normalized and "franja" in normalized
+
+
+def _parse_ambientes(tipologia: Any) -> int | None:
+    if tipologia is None:
+        return None
+    text = _strip_accents(str(tipologia).lower())
+    match = re.search(r"\b(\d{1,2})\b", text)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_iso_month(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = _strip_accents(str(value).strip().lower())
+    if not text:
+        return None
+    month_map = {
+        "enero": "01",
+        "febrero": "02",
+        "marzo": "03",
+        "abril": "04",
+        "mayo": "05",
+        "junio": "06",
+        "julio": "07",
+        "agosto": "08",
+        "septiembre": "09",
+        "setiembre": "09",
+        "octubre": "10",
+        "noviembre": "11",
+        "diciembre": "12",
+    }
+    month = None
+    for token, month_value in month_map.items():
+        if token in text:
+            month = month_value
+            break
+    year_match = re.search(r"\b(20\d{2})\b", text)
+    year = year_match.group(1) if year_match else None
+    if year and month:
+        return f"{year}-{month}"
+    if re.fullmatch(r"20\d{2}-\d{2}", text):
+        return text
+    return None
+
+
+def _normalize_provider(value: Any) -> str | None:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return None
+    if raw.startswith("gupshup"):
+        return "gupshup"
+    if raw.startswith("meta"):
+        return "meta"
+    if raw in {"gs", "wa_meta", "meta_whatsapp", "gupshup_whatsapp"}:
+        if raw in {"gs", "gupshup_whatsapp"}:
+            return "gupshup"
+        return "meta"
+    return raw
+
+
+def _build_schedule_visit_summary(
+    commercial_slots: dict[str, Any] | None,
+) -> dict[str, Any]:
+    slots = commercial_slots if isinstance(commercial_slots, dict) else {}
+    zona = slots.get("zona") or "Palermo"
+    ambientes = _parse_ambientes(slots.get("tipologia")) or 3
+
+    presupuesto = slots.get("presupuesto")
+    try:
+        presupuesto = int(presupuesto) if presupuesto is not None else None
+    except (TypeError, ValueError):
+        presupuesto = None
+    if not presupuesto:
+        presupuesto = 120000
+
+    # Note: mudanza/fecha_mudanza removed (flujo simplificado)
+
+    return {
+        "zona": zona,
+        "ambientes": ambientes,
+        "presupuesto_usd": presupuesto,
+    }
+
+
 def _intent_order(intent_name: str) -> int:
-    return INTENT_PRIORITY.index(intent_name) if intent_name in INTENT_PRIORITY else len(INTENT_PRIORITY)
+    return (
+        INTENT_PRIORITY.index(intent_name)
+        if intent_name in INTENT_PRIORITY
+        else len(INTENT_PRIORITY)
+    )
 
 
 def _ensure_list(value: Any) -> list[str]:
@@ -437,7 +590,9 @@ def _ensure_list(value: Any) -> list[str]:
     return [str(value)]
 
 
-def _build_event_data(state: AiWorkflowState, data: dict[str, Any] | None) -> dict[str, Any]:
+def _build_event_data(
+    state: AiWorkflowState, data: dict[str, Any] | None
+) -> dict[str, Any]:
     base = dict(data or {})
     primary_intent = (
         base.pop("primaryIntent", None)
@@ -445,15 +600,23 @@ def _build_event_data(state: AiWorkflowState, data: dict[str, Any] | None) -> di
         or state.get("intent")
         or "general"
     )
-    secondary_intents = base.pop("secondaryIntents", None) or state.get("secondary_intents") or []
+    secondary_intents = (
+        base.pop("secondaryIntents", None) or state.get("secondary_intents") or []
+    )
     pragmatics_data = state.get("pragmatics") or {}
     speech_act = base.pop("speechAct", None) or pragmatics_data.get("speechAct")
-    missing_slots = base.pop("missingSlots", None) or pragmatics_data.get("missingSlots") or {}
+    missing_slots = (
+        base.pop("missingSlots", None) or pragmatics_data.get("missingSlots") or {}
+    )
     missing_count = state.get("missing_slots_count")
     if missing_count is None:
         missing_count = 0
         if isinstance(missing_slots, dict):
-            missing_count = sum(len(slots) for slots in missing_slots.values() if isinstance(slots, list))
+            missing_count = sum(
+                len(slots)
+                for slots in missing_slots.values()
+                if isinstance(slots, list)
+            )
 
     event_data: dict[str, Any] = {
         "primaryIntent": str(primary_intent),
@@ -508,8 +671,12 @@ async def _record_step(
     }
     store.add_step(run_id, step)
     emit_summary = _shorten_text(summary)
-    emit_data = _build_event_data(state or {}, event_data if event_data is not None else data)
-    await events.emit_run_step(run_id, node_id, status, started_at, ended_at, emit_summary, emit_data)
+    emit_data = _build_event_data(
+        state or {}, event_data if event_data is not None else data
+    )
+    await events.emit_run_step(
+        run_id, node_id, status, started_at, ended_at, emit_summary, emit_data
+    )
 
 
 async def normalize_input(state: AiWorkflowState) -> dict[str, Any]:
@@ -520,7 +687,7 @@ async def normalize_input(state: AiWorkflowState) -> dict[str, Any]:
         commercial_slots = state.get("commercial_slots")
         intent_hint = state.get("intent_hint")
         clean_input = ""
-        
+
         if isinstance(raw_input, dict):
             clean_input = " ".join(str(raw_input.get("text") or "").split())
             context = raw_input.get("context")
@@ -549,10 +716,10 @@ async def normalize_input(state: AiWorkflowState) -> dict[str, Any]:
             state=state,
         )
         return {
-            "clean_input": clean_input, 
+            "clean_input": clean_input,
             "normalized_input": normalized,
             "commercial_slots": commercial_slots,
-            "intent_hint": intent_hint
+            "intent_hint": intent_hint,
         }
     except Exception as exc:
         ended_at = _epoch_ms()
@@ -579,7 +746,9 @@ async def intent_classify(state: AiWorkflowState) -> dict[str, Any]:
         intent_hint = state.get("intent_hint")
         if intent_hint and intent_hint in INTENT_KEYWORDS:
             primary_intent = intent_hint
-            scored = [{"name": intent_hint, "score": 100.0, "evidence": ["intent_hint"]}]
+            scored = [
+                {"name": intent_hint, "score": 100.0, "evidence": ["intent_hint"]}
+            ]
             secondary = []
         else:
             scored: list[dict[str, Any]] = []
@@ -587,12 +756,14 @@ async def intent_classify(state: AiWorkflowState) -> dict[str, Any]:
                 evidence = [kw for kw in keywords if _contains_keyword(match_text, kw)]
                 score = float(len(evidence))
                 if score > 0:
-                    scored.append({"name": intent_name, "score": score, "evidence": evidence})
+                    scored.append(
+                        {"name": intent_name, "score": score, "evidence": evidence}
+                    )
 
             # Check intent_hint for boosting if we didn't force it (e.g. if we want to just boost property_search)
             # Actually if intent_hint is "property_search" we force it above now.
             # But let's keep the existing logic structure if intent_hint wasn't in keys (unlikely).
-            
+
             if scored:
                 scored.sort(
                     key=lambda item: (
@@ -601,7 +772,11 @@ async def intent_classify(state: AiWorkflowState) -> dict[str, Any]:
                     )
                 )
                 primary_intent = scored[0]["name"]
-                secondary = [item["name"] for item in scored[1:] if item.get("score", 0.0) >= INTENT_SCORE_THRESHOLD]
+                secondary = [
+                    item["name"]
+                    for item in scored[1:]
+                    if item.get("score", 0.0) >= INTENT_SCORE_THRESHOLD
+                ]
             else:
                 primary_intent = "general"
                 secondary = []
@@ -615,7 +790,11 @@ async def intent_classify(state: AiWorkflowState) -> dict[str, Any]:
             started_at,
             ended_at,
             summary,
-            {"primaryIntent": primary_intent, "secondaryIntents": secondary, "intents": scored},
+            {
+                "primaryIntent": primary_intent,
+                "secondaryIntents": secondary,
+                "intents": scored,
+            },
             state=state,
         )
         return {
@@ -654,7 +833,7 @@ async def extract_entities(state: AiWorkflowState) -> dict[str, Any]:
         phones = _dedupe(PHONE_RE.findall(text_input))
         dni_cuit = _dedupe(DNI_CUIT_RE.findall(text_input))
         addresses = _dedupe(ADDRESS_RE.findall(text_input))
-        
+
         # Check expected slot to guard against mis-parsing
         comm_slots = state.get("commercial_slots") or {}
         expected_slot = comm_slots.get("expected_slot")
@@ -663,24 +842,14 @@ async def extract_entities(state: AiWorkflowState) -> dict[str, Any]:
         zona = commercial_memory.parse_zona(text_input)
         tipologia = commercial_memory.parse_tipologia(text_input)
         visit_preference = commercial_memory.parse_visita(text_input)
-        
-        # If expected is visit_schedule, we should NOT parse budget/mudanza usually,
+
+        # If expected is visit_schedule, we should NOT parse budget usually,
         # unless it's very explicit.
+        # Note: fecha_mudanza parsing removed (flujo simplificado)
         if expected_slot == "visit_schedule" and visit_preference:
             presupuesto, moneda = None, None
-            fecha_mudanza = None
         else:
             presupuesto, moneda = commercial_memory.parse_budget_currency(text_input)
-            fecha_mudanza = commercial_memory.parse_fecha_mudanza(text_input)
-        
-        # Guard: fecha_mudanza generic text vs real date
-        # If we are NOT expecting a date, and the parsed text is generic (no digits, no month), ignore it.
-        if fecha_mudanza and expected_slot != "fecha_mudanza":
-            # Heuristic: check if it contains any month name or digits
-            has_month = any(m in fecha_mudanza.lower() for m in commercial_memory.MONTH_TOKENS)
-            has_digit = any(c.isdigit() for c in fecha_mudanza)
-            if not has_month and not has_digit:
-                fecha_mudanza = None
 
         # Guard: Budget mis-parsing (e.g. years like 2026 being parsed as budget)
         # If we are NOT expecting budget, and we found a number without currency, ignore it.
@@ -694,25 +863,24 @@ async def extract_entities(state: AiWorkflowState) -> dict[str, Any]:
             "phones": phones,
             "dni_cuit": dni_cuit,
             "addresses": addresses,
-            # Extracted commercial slots
+            # Extracted commercial slots (fecha_mudanza removed)
             "zona": zona,
             "tipologia": tipologia,
             "presupuesto": presupuesto,
             "moneda": moneda,
-            "fecha_mudanza": fecha_mudanza,
             "visit": visit_preference,
         }
         # Simplified ambiguity detection since commercial_memory handles most
         # But we still want to flag it if currency is missing so services can ask ambiguity question
         if presupuesto and not moneda:
-             entities["budget_ambiguous"] = True
+            entities["budget_ambiguous"] = True
 
         summary = f"entities: email={len(emails)} phone={len(phones)} commercial="
         found_comm = [k for k in COMMERCIAL_SLOT_PRIORITY if entities.get(k)]
         summary += ",".join(found_comm) if found_comm else "none"
         if visit_preference:
             summary += " +visit"
-        
+
         ended_at = _epoch_ms()
         await _record_step(
             run_id,
@@ -748,38 +916,37 @@ async def pragmatics(state: AiWorkflowState) -> dict[str, Any]:
         match_text = _strip_accents(normalized.lower())
         intents = state.get("intents") or []
         entities = state.get("entities") or {}
-        
+
         # Merge commercial slots: start with known history, override with new entities
         current_commercial = state.get("commercial_slots") or {}
         merged_commercial = dict(current_commercial)
-        
+
         # Override with extracted entities if present
         if entities.get("zona"):
             merged_commercial["zona"] = entities["zona"]
         if entities.get("tipologia"):
             merged_commercial["tipologia"] = entities["tipologia"]
-        
+
         # Budget logic update
         new_amt = entities.get("presupuesto")
         new_cur = entities.get("moneda")
-        
+
         if new_amt is not None:
-             merged_commercial["presupuesto"] = new_amt
-             merged_commercial["budget_ambiguous"] = False
-        
+            merged_commercial["presupuesto"] = new_amt
+            merged_commercial["budget_ambiguous"] = False
+
         if new_cur is not None:
-             merged_commercial["moneda"] = new_cur
-             merged_commercial["budget_ambiguous"] = False
-        
+            merged_commercial["moneda"] = new_cur
+            merged_commercial["budget_ambiguous"] = False
+
         if entities.get("budget_ambiguous"):
             merged_commercial["budget_ambiguous"] = True
-            
-        if entities.get("fecha_mudanza"):
-            merged_commercial["fecha_mudanza"] = entities["fecha_mudanza"]
-            
+
+        # Note: fecha_mudanza merging removed (flujo simplificado)
+
         if entities.get("visit"):
             merged_commercial["visit"] = entities["visit"]
-            
+
         state["commercial_slots"] = merged_commercial
 
         speech_act = "other"
@@ -802,7 +969,7 @@ async def pragmatics(state: AiWorkflowState) -> dict[str, Any]:
         )
         missing_slots: dict[str, list[str]] = {}
         recommended_questions: list[str] = []
-        
+
         if property_search_hint:
             slots = commercial_memory.calculate_missing_slots(merged_commercial)
             filters = _extract_search_filters(state)
@@ -814,7 +981,7 @@ async def pragmatics(state: AiWorkflowState) -> dict[str, Any]:
                 slots = [slot for slot in slots if slot != "presupuesto"]
             if filters.get("currency"):
                 slots = [slot for slot in slots if slot != "moneda"]
-            
+
             # Check budget ambiguity
             if merged_commercial.get("budget_ambiguous"):
                 if "moneda" not in slots:
@@ -831,7 +998,11 @@ async def pragmatics(state: AiWorkflowState) -> dict[str, Any]:
         if primary_intent and primary_intent != "general":
             intents_for_missing.append(primary_intent)
         for intent_name in secondary_intents:
-            if intent_name and intent_name != "general" and intent_name not in intents_for_missing:
+            if (
+                intent_name
+                and intent_name != "general"
+                and intent_name not in intents_for_missing
+            ):
                 intents_for_missing.append(intent_name)
 
         for intent_name in intents_for_missing:
@@ -844,13 +1015,21 @@ async def pragmatics(state: AiWorkflowState) -> dict[str, Any]:
             for slot in template_slots:
                 has_value = False
                 if slot == "currency":
-                    has_value = bool(entities.get("moneda") or merged_commercial.get("moneda"))
+                    has_value = bool(
+                        entities.get("moneda") or merged_commercial.get("moneda")
+                    )
                 elif slot == "budget":
-                    has_value = bool(entities.get("presupuesto") or merged_commercial.get("presupuesto"))
+                    has_value = bool(
+                        entities.get("presupuesto")
+                        or merged_commercial.get("presupuesto")
+                    )
                 elif slot == "project_or_zone":
-                    has_value = bool(entities.get("zona") or merged_commercial.get("zona"))
+                    has_value = bool(
+                        entities.get("zona") or merged_commercial.get("zona")
+                    )
                 elif slot == "date_range":
-                    has_value = bool(entities.get("visit") or entities.get("fecha_mudanza"))
+                    # Note: fecha_mudanza removed from check (flujo simplificado)
+                    has_value = bool(entities.get("visit"))
                 elif slot == "dni":
                     has_value = bool(entities.get("dni_cuit"))
                 elif slot == "income_proof":
@@ -858,9 +1037,13 @@ async def pragmatics(state: AiWorkflowState) -> dict[str, Any]:
                 elif slot == "contact_method":
                     has_value = bool(entities.get("phones") or entities.get("emails"))
                 elif slot == "unit":
-                    has_value = bool(entities.get("tipologia") or merged_commercial.get("tipologia"))
+                    has_value = bool(
+                        entities.get("tipologia") or merged_commercial.get("tipologia")
+                    )
                 elif slot == "unit_type":
-                    has_value = bool(entities.get("tipologia") or merged_commercial.get("tipologia"))
+                    has_value = bool(
+                        entities.get("tipologia") or merged_commercial.get("tipologia")
+                    )
                 else:
                     has_value = bool(entities.get(slot))
                 if not has_value:
@@ -870,7 +1053,7 @@ async def pragmatics(state: AiWorkflowState) -> dict[str, Any]:
                 question_template = QUESTION_TEMPLATES.get(intent_name)
                 if question_template:
                     recommended_questions.append(question_template)
-            
+
         recommended_questions = _dedupe(recommended_questions)
         missing_slots_count = sum(len(slots) for slots in missing_slots.values())
 
@@ -878,7 +1061,7 @@ async def pragmatics(state: AiWorkflowState) -> dict[str, Any]:
             f"speechAct={speech_act} urgency={urgency} "
             f"missing={missing_slots.get('property_search')} count={missing_slots_count}"
         )
-        
+
         data = {
             "speechAct": speech_act,
             "urgency": urgency,
@@ -939,23 +1122,41 @@ async def decide_next(state: AiWorkflowState) -> dict[str, Any]:
         search_filters: dict[str, Any] = {}
         options: dict[str, Any] | None = None
         step_data: dict[str, Any] = {}
-        
+
         decision = "search"
         intent = state.get("intent") or state.get("primary_intent") or "general"
         pragmatics = state.get("pragmatics") or {}
         missing_slots = pragmatics.get("missingSlots") or {}
         comm_slots = state.get("commercial_slots") or {}
+        schedule_visit_trigger = _is_schedule_visit_handoff_trigger(
+            state.get("clean_input")
+            or state.get("normalized_input")
+            or state.get("input")
+            or ""
+        )
+        human_action_required: dict[str, Any] | None = None
         missing_slots_count = int(
-            state.get("missing_slots_count")
-            or pragmatics.get("missingSlotsCount")
-            or 0
+            state.get("missing_slots_count") or pragmatics.get("missingSlotsCount") or 0
         )
         property_search_mode = (
-            state.get("intent_hint") == "property_search"
-            or intent == "property_search"
+            state.get("intent_hint") == "property_search" or intent == "property_search"
         )
-        
-        if intent == "handoff_agent":
+
+        if schedule_visit_trigger:
+            decision = "handoff_schedule_visit"
+            comm_slots["handoff_done"] = True
+            comm_slots["expected_slot"] = None
+            human_action_required = {
+                "reason": SCHEDULE_VISIT_REASON,
+                "summary": _build_schedule_visit_summary(comm_slots),
+                "suggested_next_message": SCHEDULE_VISIT_SUGGESTED_NEXT_MESSAGE,
+                "ticket_id": state.get("ticket_id"),
+                "provider": _normalize_provider(state.get("provider")),
+            }
+            state["handoff_required"] = True
+            state["human_action_required"] = human_action_required
+            step_data["reason"] = SCHEDULE_VISIT_REASON
+        elif intent == "handoff_agent":
             decision = "handoff"
         elif intent == "docs":
             decision = "request_docs"
@@ -969,27 +1170,35 @@ async def decide_next(state: AiWorkflowState) -> dict[str, Any]:
                 # All slots filled. Check visit.
                 visit = comm_slots.get("visit")
                 handoff_done = comm_slots.get("handoff_done")
-                
+
                 if not visit:
-                    decision = "close_commercial" if intent == "property_search" else "ask_visit_schedule"
+                    decision = (
+                        "close_commercial"
+                        if intent == "property_search"
+                        else "ask_visit_schedule"
+                    )
                     comm_slots["expected_slot"] = "visit_schedule"
-                
+
                 elif visit and not handoff_done:
                     decision = "handoff_to_sales"
                     comm_slots["handoff_done"] = True
                     comm_slots["expected_slot"] = None
                 else:
                     # Already handed off or just chatting?
-                    decision = "search" # Fallback to search/reply
+                    decision = "search"  # Fallback to search/reply
         else:
             primary_missing = missing_slots.get(intent) or []
             if primary_missing:
                 decision = "ask_next_best_question"
             elif pragmatics.get("urgency") == "high":
                 decision = "escalate"
-            elif pragmatics.get("speechAct") == "greeting" and intent == "general" and not comm_slots:
+            elif (
+                pragmatics.get("speechAct") == "greeting"
+                and intent == "general"
+                and not comm_slots
+            ):
                 decision = "welcome"
-            
+
         summary = f"decision={decision}"
         ended_at = _epoch_ms()
         if search_filters:
@@ -1008,7 +1217,7 @@ async def decide_next(state: AiWorkflowState) -> dict[str, Any]:
             step_data,
             state=state,
         )
-        
+
         payload: dict[str, Any] = {"decision": decision}
         if search_filters:
             payload["search_filters"] = search_filters
@@ -1016,17 +1225,24 @@ async def decide_next(state: AiWorkflowState) -> dict[str, Any]:
             payload["options"] = options
         if missing_slots_count > 0:
             payload["missing_slots_count"] = missing_slots_count
-        
+
         # Include merged commercial state in output
         if state.get("commercial_slots"):
             payload["commercial"] = state.get("commercial_slots")
-        recommended_question = (
-            state.get("recommended_question")
-            or pragmatics.get("recommendedQuestion")
+        if state.get("handoff_required"):
+            payload["handoff_required"] = True
+        if human_action_required:
+            payload["human_action_required"] = human_action_required
+        recommended_question = state.get("recommended_question") or pragmatics.get(
+            "recommendedQuestion"
         )
         if recommended_question:
             payload["recommended_question"] = recommended_question
-        recommended_questions = pragmatics.get("recommendedQuestions") or state.get("recommended_questions") or []
+        recommended_questions = (
+            pragmatics.get("recommendedQuestions")
+            or state.get("recommended_questions")
+            or []
+        )
         if recommended_questions:
             payload["recommended_questions"] = recommended_questions
 
@@ -1051,60 +1267,87 @@ async def build_response(state: AiWorkflowState) -> dict[str, Any]:
     started_at = _epoch_ms()
     try:
         decision = state.get("decision")
-        intent = state.get("intent")
         pragmatics = state.get("pragmatics") or {}
         comm_slots = state.get("commercial_slots") or {}
-        
+        handoff_required = bool(state.get("handoff_required"))
+        human_action_required = state.get("human_action_required")
+
         response_text = "Lo siento, no entendí bien."
 
-        if decision == "ask_next_best_question":
+        if decision == "handoff_schedule_visit":
+            response_text = SCHEDULE_VISIT_FIXED_REPLY
+            handoff_required = True
+            if not isinstance(human_action_required, dict):
+                human_action_required = {
+                    "reason": SCHEDULE_VISIT_REASON,
+                    "summary": _build_schedule_visit_summary(comm_slots),
+                    "suggested_next_message": SCHEDULE_VISIT_SUGGESTED_NEXT_MESSAGE,
+                    "ticket_id": state.get("ticket_id"),
+                    "provider": _normalize_provider(state.get("provider")),
+                }
+            await events.emit_human_action_required(
+                run_id,
+                reason=str(
+                    human_action_required.get("reason") or SCHEDULE_VISIT_REASON
+                ),
+                summary=human_action_required.get("summary")
+                or _build_schedule_visit_summary(comm_slots),
+                suggested_next_message=str(
+                    human_action_required.get("suggested_next_message")
+                    or SCHEDULE_VISIT_SUGGESTED_NEXT_MESSAGE
+                ),
+                ticket_id=human_action_required.get("ticket_id"),
+                provider=human_action_required.get("provider"),
+            )
+        elif decision == "ask_next_best_question":
             response_text = (
                 state.get("recommended_question")
                 or pragmatics.get("recommendedQuestion")
                 or ((pragmatics.get("recommendedQuestions") or [None])[0])
                 or "Cuéntame más sobre lo que buscas."
             )
-            
-        elif decision == "ask_visit_schedule" or decision == "close_commercial":
-             zona = comm_slots.get("zona") or "?"
-             tipo = comm_slots.get("tipologia") or "?"
-             pres = comm_slots.get("presupuesto") or "?"
-             mon = comm_slots.get("moneda") or ""
-             response_text = (
-                 f"¡Perfecto! Tengo tus preferencias: {zona}, {tipo}, {mon} {pres}. "
-                 "¿Qué día y horario te queda bien para visitar?"
-             )
-             
-        elif decision == "handoff_to_sales":
-             # Confirm schedule, summarize slots, handoff
-             # visit is dict {visit_day_of_week..., visit_time_from...}
-             visit = comm_slots.get("visit") or {}
-             day = visit.get("visit_day_of_week") or "?"
-             time = visit.get("visit_time_from") or "?"
-             
-             zona = comm_slots.get("zona") or "?"
-             tipo = comm_slots.get("tipologia") or "?"
-             pres = comm_slots.get("presupuesto") or "?"
-             mon = comm_slots.get("moneda") or ""
-             mud = comm_slots.get("fecha_mudanza") or ""
-             mid_text = ""
-             if mud:
-                 mid_text = f", mudanza {mud}"
 
-             response_text = (
-                 f"Excelente. Agendamos para el {day} a las {time}. "
-                 f"Resumen: {zona}, {tipo}, {mon} {pres}{mid_text}. "
-                 "Un asesor te confirma en breve. ¿WhatsApp o llamada?"
-             )
+        elif decision == "ask_visit_schedule" or decision == "close_commercial":
+            zona = comm_slots.get("zona") or "?"
+            tipo = comm_slots.get("tipologia") or "?"
+            pres = comm_slots.get("presupuesto") or "?"
+            mon = comm_slots.get("moneda") or ""
+            response_text = (
+                f"¡Perfecto! Tengo tus preferencias: {zona}, {tipo}, {mon} {pres}. "
+                "¿Qué día y horario te queda bien para visitar?"
+            )
+
+        elif decision == "handoff_to_sales":
+            # Confirm schedule, summarize slots, handoff
+            # visit is dict {visit_day_of_week..., visit_time_from...}
+            visit = comm_slots.get("visit") or {}
+            day = visit.get("visit_day_of_week") or "?"
+            time = visit.get("visit_time_from") or "?"
+
+            zona = comm_slots.get("zona") or "?"
+            tipo = comm_slots.get("tipologia") or "?"
+            pres = comm_slots.get("presupuesto") or "?"
+            mon = comm_slots.get("moneda") or ""
+            # Note: fecha_mudanza removed from summary (flujo simplificado)
+
+            response_text = (
+                f"Excelente. Agendamos para el {day} a las {time}. "
+                f"Resumen: {zona}, {tipo}, {mon} {pres}. "
+                "Un asesor te confirma en breve. ¿WhatsApp o llamada?"
+            )
 
         elif decision == "welcome":
             response_text = "¡Hola! Soy el asistente de Vértice360. ¿En qué zona estás buscando propiedad?"
         elif decision == "request_docs":
-            response_text = "Por favor enviame tu DNI y recibo de sueldo por aquí para avanzar."
+            response_text = (
+                "Por favor enviame tu DNI y recibo de sueldo por aquí para avanzar."
+            )
         else:
             # Fallback / General Search
-            response_text = "Estoy buscando propiedades que coincidan con tu criterio..."
-        
+            response_text = (
+                "Estoy buscando propiedades que coincidan con tu criterio..."
+            )
+
         summary = f"response len={len(response_text)}"
         ended_at = _epoch_ms()
         await _record_step(
@@ -1117,7 +1360,12 @@ async def build_response(state: AiWorkflowState) -> dict[str, Any]:
             {"responseText": response_text},
             state=state,
         )
-        return {"response_text": response_text}
+        payload: dict[str, Any] = {"response_text": response_text}
+        if handoff_required:
+            payload["handoff_required"] = True
+        if isinstance(human_action_required, dict):
+            payload["human_action_required"] = human_action_required
+        return payload
     except Exception as exc:
         ended_at = _epoch_ms()
         await _record_step(

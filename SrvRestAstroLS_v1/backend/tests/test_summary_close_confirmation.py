@@ -54,18 +54,17 @@ async def _async_test_summary_close_flow():
     assert "120000" in reply4
     assert "coordinar visita" in reply4.lower()
     
-    # Pending action should remain unset for summary close
+    # Pending action should be set for summary close in new flow
     t = store._find_active_ticket_by_phone(sender)
-    assert t["pendingAction"] is None
+    assert t["pendingAction"] == "schedule_visit"
 
-    # 5. Confirm "Si"
+
+    # 5. Confirm "Si" -> should re-prompt scheduling slot, not restart onboarding
     r5 = await services.process_inbound_message({"text": "si, todo bien", "from": sender, "messageId": "5"})
-    reply5 = r5["replyText"]
-    print(f"DEBUG: Reply 5: {reply5}")
+    assert "HANDOFF_WAITING_OPERATOR" not in r5["actions"]
+    assert "día y franja horaria" in (r5.get("replyText") or "").lower()
+    assert "¿por qué zona buscás" not in (r5.get("replyText") or "").lower()
 
-    # Check Result 5: Should ask for visit window
-    assert "franja horaria" in reply5.lower()
-    # PendingAction not used in new flow
     
     # Check AI was NOT called for r5 (optimization check, optional but good)
     # services._run_ai_workflow_reply.call_count should be ... well, it was called for previous steps.

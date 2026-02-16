@@ -10,6 +10,7 @@ const EVENT_TYPES = [
   "messaging.inbound.raw",
   "messaging.outbound",
   "messaging.status",
+  "human.action_required",
 ];
 
 let source = null;

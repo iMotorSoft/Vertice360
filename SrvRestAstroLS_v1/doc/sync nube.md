@@ -17,7 +17,7 @@ rsync -avz \
     /media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/Vertice360/SrvRestAstroLS_v1/astro/dist/ \
     administrator@imotorsoft.com:/home/administrator/project/iMotorSoft/ai/Vertice360/SrvRestAstroLS_v1/astro/dist/
     
-rsync -avz --exclude '__pycache__' --exclude '.git' --exclude '*.pyc' --exclude '_uploads' --exclude 'storage' --exclude 'clientA/' --exclude '.env' --exclude '.venv/' /media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/Vertice360/SrvRestAstroLS_v1/backend/ administrator@imotorsoft.com:/home/administrator/project/iMotorSoft/ai/Vertice360/SrvRestAstroLS_v1/backend/
+rsync -avz --exclude '__pycache__' --exclude '.git' --exclude '*.pyc' --exclude '_uploads' --exclude 'storage' --exclude 'clientA/' --exclude '.env' --exclude '.venv/' /media/issajar/DEVELOP/Projects/iMotorSoft/ai/dev/Vertice360/SrvRestAstroLS_v1/backend/ administrator@imotorsoft.com:/home/administrator/project/iMotorSoft/ai/Pozo360/SrvRestAstroLS_v1/backend/
 
 Sos un experto en UI para este proyecto conversacional, tenemos que modificar la pagina index.astro de pages.
 que cuente el proyecto, un boton para ir a ver la demo que esta en 
