@@ -3,15 +3,28 @@
     open = false,
     cliente = "",
     mode = "proponer",
+    initialAdvisor = "",
+    initialOption1 = "",
+    initialOption2 = "",
+    initialOption3 = "",
+    initialMessage = "",
     onClose = () => {},
     onSubmit = () => {},
   } = $props();
 
-  let asesor = $state("Asesor Demo");
-  let opcion1 = $state("Lunes 10:00");
-  let opcion2 = $state("Martes 17:30");
-  let opcion3 = $state("");
+  const DEFAULTS = {
+    advisor: "Asesor Demo",
+    option1: "Lunes 10:00",
+    option2: "Martes 17:30",
+    option3: "",
+  };
+
+  let asesor = $state(DEFAULTS.advisor);
+  let opcion1 = $state(DEFAULTS.option1);
+  let opcion2 = $state(DEFAULTS.option2);
+  let opcion3 = $state(DEFAULTS.option3);
   let mensaje = $state("Hola, te comparto opciones para coordinar una visita.");
+  let submitting = $state(false);
 
   const getModeConfig = (currentMode) => {
     if (currentMode === "ver_propuesta") {
@@ -41,23 +54,35 @@
   $effect(() => {
     if (!open) return;
     const modeConfig = getModeConfig(mode);
-    mensaje = modeConfig.defaultMessage;
+    asesor = String(initialAdvisor || "").trim() || DEFAULTS.advisor;
+    opcion1 = String(initialOption1 || "").trim() || DEFAULTS.option1;
+    opcion2 = String(initialOption2 || "").trim() || DEFAULTS.option2;
+    opcion3 = String(initialOption3 || "").trim() || DEFAULTS.option3;
+    mensaje = String(initialMessage || "").trim() || modeConfig.defaultMessage;
+    submitting = false;
   });
 
   const handleClose = () => {
+    if (submitting) return;
     onClose();
   };
 
-  const handleSend = () => {
-    onSubmit({
-      cliente,
-      asesor,
-      opcion1,
-      opcion2,
-      opcion3,
-      mensaje,
-    });
-    onClose();
+  const handleSend = async () => {
+    if (submitting) return;
+    submitting = true;
+    try {
+      await onSubmit({
+        cliente,
+        asesor,
+        opcion1,
+        opcion2,
+        opcion3,
+        mensaje,
+      });
+      onClose();
+    } finally {
+      submitting = false;
+    }
   };
 </script>
 
@@ -68,6 +93,7 @@
       class="btn btn-ghost btn-sm absolute right-2 top-2"
       aria-label="Cerrar modal de visita"
       onclick={handleClose}
+      disabled={submitting}
     >
       ✕
     </button>
@@ -80,34 +106,34 @@
     <div class="mt-4 space-y-3">
       <label class="form-control w-full">
         <span class="label-text text-sm">Asesor</span>
-        <input class="input input-bordered min-h-11" type="text" bind:value={asesor} />
+        <input class="input input-bordered min-h-11" type="text" bind:value={asesor} disabled={submitting} />
       </label>
 
       <label class="form-control w-full">
         <span class="label-text text-sm">Opción 1 (día/hora)</span>
-        <input class="input input-bordered min-h-11" type="text" bind:value={opcion1} />
+        <input class="input input-bordered min-h-11" type="text" bind:value={opcion1} disabled={submitting} />
       </label>
 
       <label class="form-control w-full">
         <span class="label-text text-sm">Opción 2 (día/hora)</span>
-        <input class="input input-bordered min-h-11" type="text" bind:value={opcion2} />
+        <input class="input input-bordered min-h-11" type="text" bind:value={opcion2} disabled={submitting} />
       </label>
 
       <label class="form-control w-full">
         <span class="label-text text-sm">Opción 3 (opcional)</span>
-        <input class="input input-bordered min-h-11" type="text" bind:value={opcion3} />
+        <input class="input input-bordered min-h-11" type="text" bind:value={opcion3} disabled={submitting} />
       </label>
 
       <label class="form-control w-full">
         <span class="label-text text-sm">Mensaje</span>
-        <textarea class="textarea textarea-bordered min-h-24" bind:value={mensaje}></textarea>
+        <textarea class="textarea textarea-bordered min-h-24" bind:value={mensaje} disabled={submitting}></textarea>
       </label>
     </div>
 
     <div class="modal-action">
-      <button type="button" class="btn btn-ghost min-h-11" onclick={handleClose}>Cancelar</button>
-      <button type="button" class="btn btn-primary min-h-11" onclick={handleSend}
-        >{getModeConfig(mode).submitLabel}</button
+      <button type="button" class="btn btn-ghost min-h-11" onclick={handleClose} disabled={submitting}>Cancelar</button>
+      <button type="button" class="btn btn-primary min-h-11" onclick={handleSend} disabled={submitting}
+        >{submitting ? "Enviando..." : getModeConfig(mode).submitLabel}</button
       >
     </div>
   </div>

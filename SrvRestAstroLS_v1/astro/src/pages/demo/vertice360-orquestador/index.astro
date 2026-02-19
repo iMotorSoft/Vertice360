@@ -1,7 +1,7 @@
 ---
 import BaseLayout from "../../../layouts/BaseLayout.astro";
 import Landing from "../../../components/demo/vertice360-orquestador/Landing.svelte";
-import OrquestadorApp from "../../../components/demo/vertice360-orquestador/OrquestadorApp.svelte";
+import OrquestadorAppLive from "../../../components/demo/vertice360-orquestador/OrquestadorAppLive.svelte";
 
 const branding = {
   displayName: "Vertice360 Demo",
@@ -10,22 +10,30 @@ const branding = {
   secondaryColor: "#38BDF8",
   accentColor: "#F59E0B",
 };
+
+const initialCliente = (Astro.url.searchParams.get("cliente") ?? "").trim();
+const hasInitialCliente = initialCliente.length > 0;
 ---
 
 <BaseLayout brand={branding}>
-  <div id="intro">
+  <div id="intro" class:list={{ hidden: hasInitialCliente }}>
     <Landing />
   </div>
 
-  <div id="app" class="hidden">
-    <OrquestadorApp client:load />
+  <div id="app" class:list={{ hidden: !hasInitialCliente }}>
+    <OrquestadorAppLive client:load initialCliente={initialCliente} />
   </div>
 
   <script is:inline>
     (() => {
-      const applyMode = () => {
-        const clienteRaw = new URLSearchParams(window.location.search).get("cliente");
-        const cliente = (clienteRaw ?? "").trim();
+      const initialCliente = {JSON.stringify(initialCliente)};
+
+      const readCliente = () => {
+        const raw = new URLSearchParams(window.location.search).get("cliente");
+        return (raw ?? "").trim();
+      };
+
+      const applyMode = (cliente) => {
         const hasCliente = cliente.length > 0;
         const intro = document.getElementById("intro");
         const app = document.getElementById("app");
@@ -37,12 +45,18 @@ const branding = {
         } else {
           intro.classList.remove("hidden");
           app.classList.add("hidden");
-          window.dispatchEvent(new CustomEvent("orquestador:reset-ui"));
+          window.dispatchEvent(new CustomEvent("orquestador-live:reset-ui"));
         }
+
+        window.dispatchEvent(
+          new CustomEvent("orquestador-live:cliente", {
+            detail: { cliente, hasCliente },
+          }),
+        );
       };
 
-      applyMode();
-      window.addEventListener("popstate", applyMode);
+      applyMode(initialCliente);
+      window.addEventListener("popstate", () => applyMode(readCliente()));
     })();
   </script>
 </BaseLayout>

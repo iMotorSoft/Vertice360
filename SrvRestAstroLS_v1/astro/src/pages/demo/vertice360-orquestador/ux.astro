@@ -1,0 +1,48 @@
+---
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import Landing from "../../../components/demo/vertice360-orquestador/Landing.svelte";
+import OrquestadorApp from "../../../components/demo/vertice360-orquestador/OrquestadorApp.svelte";
+
+const branding = {
+  displayName: "Vertice360 Demo",
+  logoUrl: "/logo-placeholder.svg",
+  primaryColor: "#0F766E",
+  secondaryColor: "#38BDF8",
+  accentColor: "#F59E0B",
+};
+---
+
+<BaseLayout brand={branding}>
+  <div id="intro">
+    <Landing />
+  </div>
+
+  <div id="app" class="hidden">
+    <OrquestadorApp client:load />
+  </div>
+
+  <script is:inline>
+    (() => {
+      const applyMode = () => {
+        const clienteRaw = new URLSearchParams(window.location.search).get("cliente");
+        const cliente = (clienteRaw ?? "").trim();
+        const hasCliente = cliente.length > 0;
+        const intro = document.getElementById("intro");
+        const app = document.getElementById("app");
+        if (!intro || !app) return;
+
+        if (hasCliente) {
+          intro.classList.add("hidden");
+          app.classList.remove("hidden");
+        } else {
+          intro.classList.remove("hidden");
+          app.classList.add("hidden");
+          window.dispatchEvent(new CustomEvent("orquestador:reset-ui"));
+        }
+      };
+
+      applyMode();
+      window.addEventListener("popstate", applyMode);
+    })();
+  </script>
+</BaseLayout>

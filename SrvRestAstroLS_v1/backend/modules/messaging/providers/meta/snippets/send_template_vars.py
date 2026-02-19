@@ -2,7 +2,7 @@
 """
 Example of sending a Template message WITH VARIABLES (parameters).
 
-To send "free text" (variable content) within a template, the template 
+To send "free text" (variable content) within a template, the template
 must be created in Meta with placeholders like {{1}}, {{2}}, etc.
 
 Example Template "order_update":
@@ -12,17 +12,18 @@ This script demonstrates the structure to fill those placeholders.
 """
 
 import json
-import os
 import sys
 import urllib.request
 import urllib.error
+
+import globalVar
 
 # ---- CONFIGURATION ----
 TO = "541130946950"
 # WARNING: You must have a template named exactly this in your Meta Manager
 # with at least 1 parameter {{1}} for this specific example to work.
 # 'hello_world' usually does NOT accept parameters and will fail if you send them.
-TEMPLATE_NAME = "sample_issue_resolution" # Example standard template often available
+TEMPLATE_NAME = "sample_issue_resolution"  # Example standard template often available
 LANGUAGE_CODE = "en_US"
 
 # Defines the values for {{1}}, {{2}}, etc.
@@ -33,9 +34,9 @@ PARAMETERS = [
 ]
 # -----------------------
 
-TOKEN = os.getenv("META_VERTICE360_WABA_TOKEN", "").strip()
-PHONE_NUMBER_ID = os.getenv("META_VERTICE360_PHONE_NUMBER_ID", "").strip()
-GRAPH_VERSION = os.getenv("META_GRAPH_VERSION", "v20.0").strip()
+TOKEN = (globalVar.META_VERTICE360_WABA_TOKEN or "").strip()
+PHONE_NUMBER_ID = (globalVar.META_VERTICE360_PHONE_NUMBER_ID or "").strip()
+GRAPH_VERSION = (globalVar.META_GRAPH_VERSION or "v20.0").strip()
 
 if not TOKEN or not PHONE_NUMBER_ID:
     print("ERROR: Missing env vars")
@@ -50,12 +51,7 @@ payload = {
     "template": {
         "name": TEMPLATE_NAME,
         "language": {"code": LANGUAGE_CODE},
-        "components": [
-            {
-                "type": "body",
-                "parameters": PARAMETERS
-            }
-        ]
+        "components": [{"type": "body", "parameters": PARAMETERS}],
     },
 }
 

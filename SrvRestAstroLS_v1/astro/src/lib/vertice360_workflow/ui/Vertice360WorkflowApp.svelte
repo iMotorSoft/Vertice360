@@ -1,4 +1,5 @@
 <script>
+  import { URL_FONT_SPACE_GROTESK } from "../../../components/global.js";
   import { onDestroy, onMount } from "svelte";
   import { workflow } from "../state.svelte";
   import { connectWorkflowSSE } from "../sse";
@@ -35,6 +36,10 @@
     return "alert-info";
   };
 </script>
+
+<svelte:head>
+  <link rel="stylesheet" href={URL_FONT_SPACE_GROTESK} />
+</svelte:head>
 
 <div class="vertice360-workflow-app relative overflow-hidden rounded-[32px] border border-base-200 bg-gradient-to-br from-white via-white to-slate-50 shadow-xl">
   <div class="pointer-events-none absolute -top-20 right-0 h-56 w-56 rounded-full bg-primary/10 blur-3xl"></div>
@@ -105,8 +110,6 @@
 </div>
 
 <style>
-  @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
-
   :global(.vertice360-workflow-app) {
     font-family: "Space Grotesk", "Inter", system-ui, sans-serif;
   }

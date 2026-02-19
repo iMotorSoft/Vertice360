@@ -1,1 +1,4 @@
-export const API_BASE_URL = "http://localhost:7062";
+import { getRestBaseUrl } from "../components/global.js";
+
+// Backward-compatible alias; canonical source remains components/global.js.
+export const API_BASE_URL = getRestBaseUrl();

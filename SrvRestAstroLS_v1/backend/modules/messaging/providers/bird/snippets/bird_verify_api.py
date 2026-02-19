@@ -1,12 +1,14 @@
-
-import os
 import httpx
 import sys
 
-# Load environment variables
-BIRD_API_KEY = os.getenv("BIRD_API_KEY_VERTICE360_DEV_DEBUG") or os.getenv("BIRD_API_KEY_VERTICE360_DEV")
-BIRD_WORKSPACE_ID = os.getenv("BIRD_WORKSPACE_ID")
-BIRD_API_BASE = os.getenv("BIRD_API_BASE", "https://api.bird.com")
+import globalVar
+
+# Load configuration only through globalVar helpers/constants
+BIRD_API_KEY = globalVar.get_env_str("BIRD_API_KEY_VERTICE360_DEV_DEBUG") or globalVar.get_env_str(
+    "BIRD_API_KEY_VERTICE360_DEV"
+)
+BIRD_WORKSPACE_ID = globalVar.get_env_str("BIRD_WORKSPACE_ID")
+BIRD_API_BASE = globalVar.get_env_str("BIRD_API_BASE", "https://api.bird.com")
 
 if not BIRD_API_KEY:
     print("Error: BIRD_API_KEY_VERTICE360_DEV (or DEBUG) is not set.")
@@ -39,7 +41,7 @@ try:
     with httpx.Client(timeout=10.0) as client:
         response = client.get(test_url, headers=headers)
         print(f"Status: {response.status_code}")
-        
+
         if response.status_code == 200:
             print("SUCCESS! Connection verified.")
             data = response.json()
@@ -48,9 +50,9 @@ try:
             print("FAILED.")
             try:
                 print(f"Error: {response.json()}")
-            except:
+            except Exception:
                 print(f"Error: {response.text}")
-            
+
             if response.status_code == 403 and not BIRD_WORKSPACE_ID:
                 print("\nTip: Set BIRD_WORKSPACE_ID in your environment to fix 403 errors.")
 

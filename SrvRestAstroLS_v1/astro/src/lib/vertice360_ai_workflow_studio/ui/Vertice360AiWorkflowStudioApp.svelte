@@ -1,4 +1,5 @@
 <script>
+  import { URL_FONT_OUTFIT } from "../../../components/global.js";
   import { studio } from "../state.svelte";
   import { connectSse } from "../sse";
   import StudioHeader from "./StudioHeader.svelte";
@@ -45,6 +46,10 @@
     };
   });
 </script>
+
+<svelte:head>
+  <link rel="stylesheet" href={URL_FONT_OUTFIT} />
+</svelte:head>
 
 <div
   class="studio-shell relative overflow-hidden rounded-[32px] border border-base-200 bg-gradient-to-br from-white via-slate-50 to-cyan-50 shadow-xl"
@@ -170,8 +175,6 @@
 </div>
 
 <style>
-  @import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap");
-
   :global(.studio-shell) {
     font-family: "Outfit", "Segoe UI", system-ui, sans-serif;
   }

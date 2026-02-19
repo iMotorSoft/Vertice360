@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from typing import Any
 
@@ -19,7 +18,7 @@ class MetaWhatsAppSendError(RuntimeError):
 
 
 async def post_message(payload: dict[str, Any], *, client: httpx.AsyncClient | None = None) -> dict[str, Any]:
-    if os.environ.get("DEMO_DISABLE_META_SEND") == "1":
+    if globalVar.get_env_bool("DEMO_DISABLE_META_SEND", False):
         message_id = f"demo-{uuid.uuid4().hex}"
         return {"status": "skipped", "messages": [{"id": message_id}]}
     if not globalVar.meta_whatsapp_enabled():

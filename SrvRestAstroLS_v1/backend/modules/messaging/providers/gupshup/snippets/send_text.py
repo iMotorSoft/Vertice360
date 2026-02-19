@@ -1,4 +1,3 @@
-import os
 import sys
 import httpx
 from pathlib import Path
@@ -9,17 +8,17 @@ sys.path.append(str(project_root))
 
 try:
     from backend import globalVar
-    host = globalVar.HOST
-    port = globalVar.PORT
 except ImportError:
-    host = "localhost"
-    port = 7062
+    import globalVar  # type: ignore
 
-base_url = os.getenv("VERTICE360_API_BASE") or f"http://{host}:{port}"
+host = globalVar.HOST
+port = globalVar.PORT
+
+base_url = globalVar.get_env_str("VERTICE360_API_BASE", f"http://{host}:{port}")
 url = f"{base_url.rstrip('/')}/api/demo/messaging/gupshup/whatsapp/send"
 
-to = os.getenv("GUPSHUP_TEST_TO")
-text = os.getenv("GUPSHUP_TEST_TEXT", "Hello from Gupshup demo snippet")
+to = globalVar.get_env_str("GUPSHUP_TEST_TO")
+text = globalVar.get_env_str("GUPSHUP_TEST_TEXT", "Hello from Gupshup demo snippet")
 
 if not to:
     print("Error: set GUPSHUP_TEST_TO with a destination number.")

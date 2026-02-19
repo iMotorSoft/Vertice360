@@ -2,7 +2,7 @@
 """
 Quick & dirty Meta WhatsApp Cloud API sender (hardcoded).
 
-Requires env:
+Requires env managed via globalVar:
   META_VERTICE360_WABA_TOKEN
   META_VERTICE360_PHONE_NUMBER_ID
 
@@ -11,10 +11,11 @@ Optional:
 """
 
 import json
-import os
 import sys
 import urllib.request
 import urllib.error
+
+import globalVar
 
 # ---- Hardcode your test recipient + message here ----
 TO = "541130946950"  # <-- your WhatsApp recipient (allowed in test env)
@@ -23,9 +24,9 @@ TEXT = "BSD Hola! Prueba WhatsApp Cloud API (Meta) desde iMotorSoft Messaging Hu
 # in the last 24 hours (use a Template instead).
 # ----------------------------------------------------
 
-TOKEN = os.getenv("META_VERTICE360_WABA_TOKEN", "").strip()
-PHONE_NUMBER_ID = os.getenv("META_VERTICE360_PHONE_NUMBER_ID", "").strip()
-GRAPH_VERSION = os.getenv("META_GRAPH_VERSION", "v20.0").strip()
+TOKEN = (globalVar.META_VERTICE360_WABA_TOKEN or "").strip()
+PHONE_NUMBER_ID = (globalVar.META_VERTICE360_PHONE_NUMBER_ID or "").strip()
+GRAPH_VERSION = (globalVar.META_GRAPH_VERSION or "v20.0").strip()
 
 if not TOKEN or not PHONE_NUMBER_ID:
     print("ERROR: Missing env vars:")
@@ -69,4 +70,3 @@ except urllib.error.HTTPError as e:
 except Exception as e:
     print("\nERROR:", repr(e))
     sys.exit(3)
-

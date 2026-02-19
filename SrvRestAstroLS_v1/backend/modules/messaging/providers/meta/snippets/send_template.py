@@ -3,16 +3,17 @@
 Test sending a Template message via Meta WhatsApp Cloud API.
 Templates (like 'hello_world') can be sent outside the 24h customer service window.
 
-Requires env:
+Requires env managed via globalVar:
   META_VERTICE360_WABA_TOKEN
   META_VERTICE360_PHONE_NUMBER_ID
 """
 
 import json
-import os
 import sys
 import urllib.request
 import urllib.error
+
+import globalVar
 
 # ---- Hardcode your test recipient ----
 TO = "541130946950"
@@ -20,9 +21,9 @@ TEMPLATE_NAME = "hello_world"
 LANGUAGE_CODE = "en_US"
 # --------------------------------------
 
-TOKEN = os.getenv("META_VERTICE360_WABA_TOKEN", "").strip()
-PHONE_NUMBER_ID = os.getenv("META_VERTICE360_PHONE_NUMBER_ID", "").strip()
-GRAPH_VERSION = os.getenv("META_GRAPH_VERSION", "v20.0").strip()
+TOKEN = (globalVar.META_VERTICE360_WABA_TOKEN or "").strip()
+PHONE_NUMBER_ID = (globalVar.META_VERTICE360_PHONE_NUMBER_ID or "").strip()
+GRAPH_VERSION = (globalVar.META_GRAPH_VERSION or "v20.0").strip()
 
 if not TOKEN or not PHONE_NUMBER_ID:
     print("ERROR: Missing env vars:")
@@ -36,12 +37,7 @@ payload = {
     "messaging_product": "whatsapp",
     "to": TO,
     "type": "template",
-    "template": {
-        "name": TEMPLATE_NAME,
-        "language": {
-            "code": LANGUAGE_CODE
-        }
-    },
+    "template": {"name": TEMPLATE_NAME, "language": {"code": LANGUAGE_CODE}},
 }
 
 data = json.dumps(payload).encode("utf-8")

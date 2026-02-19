@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Literal, Optional
+from urllib.parse import parse_qs, urlparse
 
 # =========================
 # App / environment
@@ -94,6 +95,11 @@ DB_URL: str = os.environ.get(
 DB_SCHEMA: str = os.environ.get("VERTICE360_DB_SCHEMA", "public")
 ENABLE_PG_TRGM: bool = True
 ENABLE_PG_VECTOR: bool = True
+
+DB_PG_V360_URL: str = os.environ.get("DB_PG_V360_URL", "").strip()
+ALLOW_FALLBACK_V360_DB: bool = os.environ.get(
+    "ALLOW_FALLBACK_V360_DB", "false"
+).strip().lower() in ("1", "true", "yes", "on")
 
 # =========================
 # Security / Roles
@@ -187,6 +193,34 @@ def _pick_env(dev, stg, prod):
     return {"dev": dev, "stg": stg, "prod": prod}[ENVIRONMENT]
 
 
+# =========================
+# Canonical env access helpers
+# =========================
+def get_env_str(name: str, default: str = "") -> str:
+    """Read environment variable as string (canonical access point)."""
+    return str(os.environ.get(name, default))
+
+
+def get_env_int(name: str, default: int, *, minimum: int | None = None) -> int:
+    """Read environment variable as int with safe fallback and optional minimum."""
+    raw = os.environ.get(name)
+    try:
+        value = int(str(raw).strip()) if raw is not None else int(default)
+    except Exception:
+        value = int(default)
+    if minimum is not None and value < minimum:
+        return minimum
+    return value
+
+
+def get_env_bool(name: str, default: bool = False) -> bool:
+    """Read environment variable as bool using common truthy values."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return bool(default)
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+
 # Automatic environment selection
 GUPSHUP_APP_NAME: str = _pick_env(
     GUPSHUP_APP_NAME_DEV, GUPSHUP_APP_NAME_STG, GUPSHUP_APP_NAME_PRO
@@ -205,6 +239,72 @@ GUPSHUP_BASE_URL: str = _pick_env(
 # =========================
 # Helpers
 # =========================
+def _is_postgresql_scheme(url: str) -> bool:
+    scheme = urlparse(str(url or "").strip()).scheme.lower()
+    return scheme in {"postgresql", "postgresql+psycopg", "postgres"}
+
+
+def _is_v360_database_name(url: str) -> bool:
+    parsed = urlparse(str(url or "").strip())
+    db_from_path = parsed.path.strip("/").lower()
+    if db_from_path == "v360":
+        return True
+    query = parse_qs(parsed.query or "")
+    dbname = (query.get("dbname") or [None])[0]
+    return str(dbname or "").strip().lower() == "v360"
+
+
+def _validate_v360_db_url(url: str) -> tuple[bool, str]:
+    candidate = str(url or "").strip()
+    if not candidate:
+        return False, "empty URL"
+    if not _is_postgresql_scheme(candidate):
+        return False, "invalid scheme (expected postgresql)"
+    if not _is_v360_database_name(candidate):
+        return False, "database name must be v360"
+    return True, "ok"
+
+
+def get_v360_db_url() -> str:
+    """Return the v360 Postgres URL with strict validation and explicit fallback."""
+    ok, reason = _validate_v360_db_url(DB_PG_V360_URL)
+    if ok:
+        return DB_PG_V360_URL
+
+    if DB_PG_V360_URL:
+        print(
+            f"[{APP_NAME}] WARNING: DB_PG_V360_URL invalid ({reason})."
+        )
+    else:
+        print(f"[{APP_NAME}] WARNING: DB_PG_V360_URL is not set.")
+
+    if not ALLOW_FALLBACK_V360_DB:
+        raise RuntimeError(
+            "DB_PG_V360_URL is required for vertice360-orquestador demo. "
+            "Set ALLOW_FALLBACK_V360_DB=true to allow fallback to VERTICE360_DB_URL."
+        )
+
+    fallback_ok, fallback_reason = _validate_v360_db_url(DB_URL)
+    if not fallback_ok:
+        raise RuntimeError(
+            "Fallback VERTICE360_DB_URL is invalid for v360 usage: "
+            f"{fallback_reason}"
+        )
+    print(
+        f"[{APP_NAME}] WARNING: using fallback VERTICE360_DB_URL for v360 demo "
+        "(ALLOW_FALLBACK_V360_DB=true)."
+    )
+    return DB_URL
+
+
+_v360_url_ok, _v360_url_reason = _validate_v360_db_url(DB_PG_V360_URL)
+if not _v360_url_ok:
+    print(
+        f"[{APP_NAME}] WARNING: DB_PG_V360_URL invalid or missing ({_v360_url_reason}). "
+        f"ALLOW_FALLBACK_V360_DB={ALLOW_FALLBACK_V360_DB}"
+    )
+
+
 def resolve_storage_uri(
     kind: Literal["incoming", "canonical", "archives"],
     account_id: str | int | None = None,
@@ -280,12 +380,18 @@ def gupshup_whatsapp_enabled() -> bool:
 
 
 def boot_log() -> None:
+    v360_ok, v360_reason = _validate_v360_db_url(DB_PG_V360_URL)
     print(
         f"[{APP_NAME}] version={APP_VERSION} env={RUN_ENV} debug={DEBUG} log={LOG_LEVEL}"
     )
     print(f"[{APP_NAME}] host={HOST} port={PORT}")
     print(f"[{APP_NAME}] uvicorn_workers={UVICORN_WORKERS}")
     print(f"[{APP_NAME}] db={DB_URL}")
+    print(
+        f"[{APP_NAME}] db_v360_configured={bool(DB_PG_V360_URL)} "
+        f"db_v360_valid={v360_ok} db_v360_reason={v360_reason} "
+        f"allow_fallback_v360={ALLOW_FALLBACK_V360_DB}"
+    )
     print(
         f"[{APP_NAME}] storage_provider={STORAGE_PROVIDER} local_root={STORAGE_LOCAL_ROOT}"
     )

@@ -1,13 +1,15 @@
 """Local test helper. Requires backend running and GUPSHUP_* env vars set."""
 
-import os
 import sys
 import json
 import httpx
 
+import globalVar
+
 
 def main() -> int:
-    base_url = os.getenv("VERTICE360_BACKEND_URL", "http://localhost:7062").rstrip("/")
+    default_base = f"http://{globalVar.HOST}:{globalVar.PORT}"
+    base_url = globalVar.get_env_str("VERTICE360_BACKEND_URL", default_base).rstrip("/")
     url = f"{base_url}/api/demo/messaging/gupshup/whatsapp/send"
 
     payload = {

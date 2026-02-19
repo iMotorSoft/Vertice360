@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "check:globals": "node scripts/check_no_hardcoded_urls.mjs"
   },
   "dependencies": {
     "@astrojs/svelte": "^7.2.5",

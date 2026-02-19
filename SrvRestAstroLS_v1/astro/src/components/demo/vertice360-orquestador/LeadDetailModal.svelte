@@ -4,6 +4,10 @@
   let {
     open = false,
     lead = null,
+    messages = null,
+    loadingMessages = false,
+    supervisorSending = false,
+    onSupervisorSend = null,
     onClose = () => {},
   } = $props();
 
@@ -148,6 +152,14 @@
     ];
   };
 
+  const normalizeIncomingMessage = (item, index) => ({
+    id: String(item?.id || `msg-${index + 1}`),
+    role: String(item?.role || "AI"),
+    text: String(item?.text || ""),
+    timestamp: item?.timestamp || null,
+    trace: String(item?.trace || ""),
+  });
+
   let initializedLeadId = $state("");
   let draftMessage = $state("");
   let recipientTarget = $state("client");
@@ -175,17 +187,40 @@
   $effect(() => {
     if (!open || !lead?.id) return;
     if (initializedLeadId === lead.id) return;
+
     initializedLeadId = lead.id;
     recipientTarget = "client";
     draftMessage = "";
+
+    if (Array.isArray(messages)) {
+      conversation = messages.map((item, index) => normalizeIncomingMessage(item, index));
+      return;
+    }
+
     conversation = buildConversation(lead);
+  });
+
+  $effect(() => {
+    if (!open || !lead?.id || !Array.isArray(messages)) return;
+    conversation = messages.map((item, index) => normalizeIncomingMessage(item, index));
   });
 
   const appendSupervisorMessage = async () => {
     const trimmed = draftMessage.trim();
-    if (!trimmed || !lead) return;
+    if (!trimmed || !lead || supervisorSending) return;
 
     const target = recipientOptions(lead).find((item) => item.key === recipientTarget);
+
+    if (typeof onSupervisorSend === "function") {
+      await onSupervisorSend({
+        target: recipientTarget,
+        text: trimmed,
+        lead,
+      });
+      draftMessage = "";
+      return;
+    }
+
     const nowIso = new Date().toISOString();
     conversation = [
       ...conversation,
@@ -241,22 +276,32 @@
         <span class="text-xs text-slate-500">{conversation.length} mensajes</span>
       </div>
 
-      <div class="space-y-3 pb-4">
-        {#each conversation as item}
-          <article class={`flex ${alignmentClass(item.role)}`}>
-            <div class={`max-w-[92%] md:max-w-[76%] rounded-2xl px-3 py-2 ${bubbleClass(item.role)}`}>
-              <div class="mb-1 flex items-center gap-2">
-                <span class={`badge badge-xs whitespace-nowrap ${roleBadgeClass(item.role)}`}>
-                  {item.role}
-                </span>
-                <span class="text-[11px] text-slate-500">{formatClock(item.timestamp)}</span>
+      {#if loadingMessages}
+        <div class="alert alert-info">
+          <span>Cargando historial real...</span>
+        </div>
+      {:else if conversation.length === 0}
+        <div class="alert alert-warning">
+          <span>Sin mensajes para este ticket.</span>
+        </div>
+      {:else}
+        <div class="space-y-3 pb-4">
+          {#each conversation as item}
+            <article class={`flex ${alignmentClass(item.role)}`}>
+              <div class={`max-w-[92%] md:max-w-[76%] rounded-2xl px-3 py-2 ${bubbleClass(item.role)}`}>
+                <div class="mb-1 flex items-center gap-2">
+                  <span class={`badge badge-xs whitespace-nowrap ${roleBadgeClass(item.role)}`}>
+                    {item.role}
+                  </span>
+                  <span class="text-[11px] text-slate-500">{formatClock(item.timestamp)}</span>
+                </div>
+                <p class="text-sm whitespace-pre-wrap break-words">{item.text}</p>
+                <p class="mt-1 text-[11px] text-slate-500">{item.trace}</p>
               </div>
-              <p class="text-sm whitespace-pre-wrap break-words">{item.text}</p>
-              <p class="mt-1 text-[11px] text-slate-500">{item.trace}</p>
-            </div>
-          </article>
-        {/each}
-      </div>
+            </article>
+          {/each}
+        </div>
+      {/if}
     </div>
 
     <footer class="border-t border-base-300 bg-base-100 px-4 py-3 md:px-5">
@@ -270,6 +315,7 @@
             <select
               class="select select-bordered min-h-11 w-full"
               bind:value={recipientTarget}
+              disabled={supervisorSending}
             >
               {#each recipientOptions(lead) as option}
                 <option value={option.key}>
@@ -284,6 +330,7 @@
               class="textarea textarea-bordered min-h-24"
               bind:value={draftMessage}
               placeholder="Escribí una intervención con trazabilidad..."
+              disabled={supervisorSending}
             ></textarea>
           </label>
         </div>
@@ -291,8 +338,9 @@
           type="button"
           class="btn btn-primary min-h-11"
           onclick={appendSupervisorMessage}
+          disabled={supervisorSending}
         >
-          Enviar intervención
+          {supervisorSending ? "Enviando..." : "Enviar intervención"}
         </button>
       </div>
     </footer>

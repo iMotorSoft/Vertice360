@@ -1,5 +1,6 @@
 <script>
     import { onMount, onDestroy } from 'svelte';
+    import { getRestBaseUrl } from '../../global.js';
 
     /**
      * @typedef {Object} LogMessage
@@ -12,11 +13,11 @@
     let messages = $state([]);
     /** @type {'CONNECTING' | 'ONLINE' | 'ERROR' | 'CLOSED'} */
     let status = $state('CONNECTING');
-    
+
     /** @type {EventSource | null} */
     let eventSource = null;
 
-    const SSE_URL = 'http://localhost:7062/api/demo/sse-test/stream';
+    const SSE_URL = `${getRestBaseUrl()}/api/demo/sse-test/stream`;
 
     function connect() {
         status = 'CONNECTING';
@@ -66,9 +67,9 @@
             </div>
         </h2>
         <p class="text-xs text-base-content/70">Endpoint: {SSE_URL}</p>
-        
+
         <div class="divider my-2"></div>
-        
+
         <h3 class="font-bold text-sm">Last 10 Messages</h3>
         <div class="h-64 overflow-y-auto bg-base-200 rounded p-2 text-xs font-mono">
             {#if messages.length === 0}
@@ -83,7 +84,7 @@
                 </div>
             {/each}
         </div>
-        
+
         <div class="card-actions justify-end mt-4">
             {#if status === 'ERROR' || status === 'CLOSED'}
                 <button class="btn btn-sm btn-primary" onclick={connect}>Retry</button>

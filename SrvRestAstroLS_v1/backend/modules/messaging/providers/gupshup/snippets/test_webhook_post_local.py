@@ -1,4 +1,3 @@
-import os
 import sys
 import json
 import httpx
@@ -10,15 +9,16 @@ sys.path.append(str(project_root))
 
 try:
     from backend import globalVar
-    port = globalVar.PORT
 except ImportError:
-    port = 7062
+    import globalVar  # type: ignore
 
-base_url = os.getenv("VERTICE360_API_BASE") or f"http://localhost:{port}"
+port = globalVar.PORT
+
+base_url = globalVar.get_env_str("VERTICE360_API_BASE", f"http://localhost:{port}")
 url = f"{base_url.rstrip('/')}/webhooks/messaging/gupshup/whatsapp"
 
 fixtures_dir = Path(__file__).resolve().parents[1] / "fixtures"
-fixture_name = os.getenv("GUPSHUP_WEBHOOK_FIXTURE", "inbound_minimal.json")
+fixture_name = globalVar.get_env_str("GUPSHUP_WEBHOOK_FIXTURE", "inbound_minimal.json")
 fixture_path = fixtures_dir / fixture_name
 
 if not fixture_path.exists():

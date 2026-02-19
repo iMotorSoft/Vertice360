@@ -1,8 +1,10 @@
 <script>
+  import { URL_SVG_XMLNS, URL_WA_ME } from "../../global.js";
+
   const demoPhoneHuman = "+4526325250";
   const demoPhoneWa = "4526325250";
   const waText = "OBRA_PALERMO_01";
-  const waUrl = `https://wa.me/${demoPhoneWa}/?text=${encodeURIComponent(waText)}`;
+  const waUrl = `${URL_WA_ME}/${demoPhoneWa}/?text=${encodeURIComponent(waText)}`;
 </script>
 
 <section class="mx-auto max-w-3xl space-y-6">
@@ -25,7 +27,7 @@
         class="btn w-full min-h-11 md:w-auto border-0 bg-[#25D366] text-white hover:bg-[#1EBE5D] inline-flex items-center justify-center gap-2"
       >
         <svg
-          xmlns="http://www.w3.org/2000/svg"
+          xmlns={URL_SVG_XMLNS}
           viewBox="0 0 32 32"
           class="h-4 w-4 fill-current"
           aria-hidden="true"

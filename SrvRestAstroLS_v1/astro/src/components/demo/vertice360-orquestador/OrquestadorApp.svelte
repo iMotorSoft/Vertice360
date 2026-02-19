@@ -1,4 +1,5 @@
 <script>
+  import { URL_SVG_XMLNS, URL_WA_ME } from "../../global.js";
   import LeadDetailModal from "./LeadDetailModal.svelte";
   import VisitProposalModal from "./VisitProposalModal.svelte";
   import {
@@ -194,7 +195,7 @@
   });
 
   const buildWhatsAppUrl = (projectCode) =>
-    `https://wa.me/${demoWhatsAppPhone}/?text=${encodeURIComponent(projectCode)}`;
+    `${URL_WA_ME}/${demoWhatsAppPhone}/?text=${encodeURIComponent(projectCode)}`;
 
   const openVisitModal = (row, mode = "proponer") => {
     selectedConversation = row;
@@ -309,7 +310,7 @@
             <div class="flex items-center justify-between gap-2 sm:justify-end">
               <span class="badge badge-primary badge-outline">Demo</span>
               <a
-                href="/demo/vertice360-orquestador/"
+                href="/demo/vertice360-orquestador/ux"
                 class="btn btn-ghost btn-sm min-h-11"
               >
                 <span aria-hidden="true">←</span>
@@ -376,7 +377,7 @@
                 class="btn btn-sm min-h-11 border-0 bg-[#25D366] text-white hover:bg-[#1EBE5D] inline-flex items-center gap-2"
               >
                 <svg
-                  xmlns="http://www.w3.org/2000/svg"
+                  xmlns={URL_SVG_XMLNS}
                   viewBox="0 0 32 32"
                   class="h-4 w-4 fill-current"
                   aria-hidden="true"
