@@ -180,7 +180,7 @@
     </div>
   </div>
 
-  <div class="card bg-base-100 shadow">
+  <div class="card-primary">
     <div class="card-body space-y-4">
       <div class="flex items-center justify-between gap-3">
         <h3 class="card-title text-lg">Proyectos en cartera</h3>
@@ -189,7 +189,7 @@
         {/if}
       </div>
       {#if error}
-        <div class="alert alert-error text-sm">
+        <div class="text-error text-sm">
           <span>Error cargando proyectos: {error}</span>
         </div>
       {:else}
@@ -227,7 +227,7 @@
   </div>
 
   <div class="grid gap-4 lg:grid-cols-2">
-    <div class="card bg-base-100 shadow">
+    <div class="card-primary">
       <div class="card-body space-y-3">
         <div class="flex items-center justify-between gap-2">
           <h3 class="card-title text-lg">Unidades del proyecto</h3>
@@ -236,7 +236,7 @@
           {/if}
         </div>
         {#if unitError}
-          <div class="alert alert-error text-sm">
+          <div class="text-error text-sm">
             <span>Error cargando unidades: {unitError}</span>
           </div>
         {:else if !selectedProject}
@@ -269,7 +269,7 @@
       </div>
     </div>
 
-    <div class="card bg-base-100 shadow">
+    <div class="card-primary">
       <div class="card-body space-y-3">
         <div class="flex items-center justify-between gap-2">
           <h3 class="card-title text-lg">Vista de inversores</h3>
@@ -278,7 +278,7 @@
           {/if}
         </div>
         {#if investorError}
-          <div class="alert alert-error text-sm">
+          <div class="text-error text-sm">
             <span>Error cargando inversores: {investorError}</span>
           </div>
         {:else if investors.length === 0}
