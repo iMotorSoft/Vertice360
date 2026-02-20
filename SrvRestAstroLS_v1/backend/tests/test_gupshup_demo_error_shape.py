@@ -9,7 +9,7 @@ from backend.routes import messaging as messaging_routes
 def test_gupshup_demo_send_returns_502_with_debug_shape(client, monkeypatch) -> None:
     monkeypatch.setattr(globalVar, "GUPSHUP_API_KEY", "test-api-key", raising=False)
     monkeypatch.setattr(globalVar, "GUPSHUP_APP_NAME", "test-app", raising=False)
-    monkeypatch.setattr(globalVar, "GUPSHUP_SRC_NUMBER", "111222333", raising=False)
+    monkeypatch.setattr(globalVar, "GUPSHUP_WA_SENDER", "+111222333", raising=False)
     monkeypatch.setattr(globalVar, "GUPSHUP_BASE_URL", "https://api.gupshup.io", raising=False)
 
     async def fake_send_text_message(self, to: str, text: str):  # noqa: ARG001
@@ -43,8 +43,9 @@ def test_gupshup_demo_send_returns_502_with_debug_shape(client, monkeypatch) -> 
     env = payload["env"]
     assert "has_api_key" in env
     assert "has_app_name" in env
-    assert "has_src_number" in env
+    assert "has_sender" in env
     assert env["has_api_key"] is True
     assert env["has_app_name"] is True
-    assert env["has_src_number"] is True
+    assert env["has_sender"] is True
+    assert env["sender"] == "+111222333"
     assert env["base_url"] == "https://api.gupshup.io"

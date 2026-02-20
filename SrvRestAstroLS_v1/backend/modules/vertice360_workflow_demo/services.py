@@ -1040,7 +1040,12 @@ def _is_send_error(result: dict[str, Any]) -> bool:
 async def _send_whatsapp_text(provider: str, to: str, text: str) -> dict[str, Any]:
     if provider == "gupshup_whatsapp":
         ack = await gupshup_send_text(to, text)
-        return {"id": ack.provider_message_id, "raw": ack.raw}
+        return {
+            "id": ack.provider_message_id,
+            "raw": ack.raw,
+            "from": globalVar.get_gupshup_wa_sender_e164(),
+            "vera_send_ok": True,
+        }
     return await send_text_message(to, text)
 
 
@@ -1055,9 +1060,26 @@ async def _send_whatsapp_text_with_context(
 ) -> dict[str, Any]:
     is_gupshup = provider == "gupshup_whatsapp"
     started_at = time.perf_counter()
+    sender_e164 = globalVar.get_gupshup_wa_sender_e164() if is_gupshup else ""
     if is_gupshup:
+        if globalVar.gupshup_provider_requested() and not sender_e164:
+            logger.warning(
+                "GUPSHUP_OUTBOUND blocked ticket=%s correlation_id=%s reason=missing_sender config_key=GUPSHUP_WA_SENDER",
+                ticket_id or "-",
+                correlation_id or "-",
+            )
+            return {
+                "status": "error",
+                "vera_send_ok": False,
+                "from": "",
+                "error": {
+                    "type": "GupshupSenderMissing",
+                    "message": "GUPSHUP_WA_SENDER is required for Gupshup outbound sends",
+                },
+            }
         logger.info(
-            "GUPSHUP_OUTBOUND attempting to=%s ticket=%s runId=%s correlation_id=%s",
+            "GUPSHUP_OUTBOUND attempting from=%s to=%s ticket=%s runId=%s correlation_id=%s",
+            sender_e164 or "-",
             to,
             ticket_id or "-",
             run_id or "-",
@@ -1085,11 +1107,14 @@ async def _send_whatsapp_text_with_context(
     if is_gupshup:
         message_id = _extract_message_id(result) or "-"
         logger.info(
-            "GUPSHUP_OUTBOUND ok ticket=%s correlation_id=%s message_id=%s",
+            "GUPSHUP_OUTBOUND ok from=%s ticket=%s correlation_id=%s message_id=%s",
+            sender_e164 or "-",
             ticket_id or "-",
             correlation_id or "-",
             message_id,
         )
+        result.setdefault("from", sender_e164)
+        result.setdefault("vera_send_ok", True)
     return result
 
 
@@ -1241,8 +1266,18 @@ async def process_inbound_message(inbound: dict[str, Any]) -> dict[str, Any]:
         ticket_id = "-"
         answered_fields: list[str] = []
         current_missing_slots: list[str] = []
+        vera_send_ok: bool | None = None
 
         def _finalize(payload: dict[str, Any], outcome: str) -> dict[str, Any]:
+            if "vera_send_ok" not in payload:
+                payload_actions = payload.get("actions")
+                if isinstance(payload_actions, list):
+                    if "OUTBOUND_FAILED" in payload_actions:
+                        payload["vera_send_ok"] = False
+                    elif "OUTBOUND_SENT" in payload_actions:
+                        payload["vera_send_ok"] = True
+                    elif vera_send_ok is not None:
+                        payload["vera_send_ok"] = vera_send_ok
             timings_ms["total_ms"] = _duration_ms(started_at)
             logger.info(
                 "INBOUND_RESULT correlation_id=%s received_at_ms=%s message_id=%s user_phone=%s ticket_id=%s outcome=%s decision=%s answered=%s missing=%s handoff_required=%s handoff_stage=%s actions=%s timings_ms=%s",
@@ -1752,6 +1787,7 @@ async def process_inbound_message(inbound: dict[str, Any]) -> dict[str, Any]:
                 timings_ms["outbound_send_ms"] = _duration_ms(outbound_started_at)
             except (MetaWhatsAppSendError, GupshupWhatsAppSendError) as exc:
                 actions.append("OUTBOUND_FAILED")
+                vera_send_ok = False
                 status_code = getattr(exc, "upstream_status", None) or getattr(
                     exc, "status_code", 500
                 )
@@ -1779,6 +1815,7 @@ async def process_inbound_message(inbound: dict[str, Any]) -> dict[str, Any]:
                 )
             if _is_send_error(result):
                 actions.append("OUTBOUND_FAILED")
+                vera_send_ok = bool(result.get("vera_send_ok", False))
                 await store.add_timeline_event(
                     ticket_id,
                     "outbound.failed",
@@ -1797,6 +1834,7 @@ async def process_inbound_message(inbound: dict[str, Any]) -> dict[str, Any]:
             message_id = _extract_message_id(result)
             if not message_id:
                 actions.append("OUTBOUND_FAILED")
+                vera_send_ok = bool(result.get("vera_send_ok", False))
                 await store.add_timeline_event(
                     ticket_id,
                     "outbound.failed",
@@ -1838,6 +1876,7 @@ async def process_inbound_message(inbound: dict[str, Any]) -> dict[str, Any]:
                 },
             )
             actions.append("OUTBOUND_SENT")
+            vera_send_ok = bool(result.get("vera_send_ok", True))
             return _finalize(
                 {
                 "ticketId": ticket_id,
@@ -1925,6 +1964,7 @@ async def process_inbound_message(inbound: dict[str, Any]) -> dict[str, Any]:
                 timings_ms["outbound_send_ms"] = _duration_ms(outbound_started_at)
             except (MetaWhatsAppSendError, GupshupWhatsAppSendError) as exc:
                 actions.append("OUTBOUND_FAILED")
+                vera_send_ok = False
                 status_code = getattr(exc, "upstream_status", None) or getattr(
                     exc, "status_code", 500
                 )
@@ -1952,6 +1992,7 @@ async def process_inbound_message(inbound: dict[str, Any]) -> dict[str, Any]:
                 )
             if _is_send_error(result):
                 actions.append("OUTBOUND_FAILED")
+                vera_send_ok = bool(result.get("vera_send_ok", False))
                 await store.add_timeline_event(
                     ticket_id,
                     "outbound.failed",
@@ -1970,6 +2011,7 @@ async def process_inbound_message(inbound: dict[str, Any]) -> dict[str, Any]:
             message_id = _extract_message_id(result)
             if not message_id:
                 actions.append("OUTBOUND_FAILED")
+                vera_send_ok = bool(result.get("vera_send_ok", False))
                 await store.add_timeline_event(
                     ticket_id,
                     "outbound.failed",
@@ -2011,6 +2053,7 @@ async def process_inbound_message(inbound: dict[str, Any]) -> dict[str, Any]:
                 },
             )
             actions.append("OUTBOUND_SENT")
+            vera_send_ok = bool(result.get("vera_send_ok", True))
             return _finalize(
                 {
                 "ticketId": ticket_id,

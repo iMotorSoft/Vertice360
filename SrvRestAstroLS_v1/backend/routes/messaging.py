@@ -93,13 +93,15 @@ async def _send_whatsapp_unified_payload(provider: str, to: str, text: str) -> t
         env_debug = {
             "has_api_key": bool(config.api_key),
             "has_app_name": bool(config.app_name),
-            "has_src_number": bool(config.src_number),
+            "has_sender": bool(config.sender_e164),
+            "sender": config.sender_e164,
             "base_url": config.base_url,
         }
         if not globalVar.gupshup_whatsapp_enabled():
             payload = {
                 "ok": False,
                 "provider": "gupshup",
+                "vera_send_ok": False,
                 "error": {
                     "type": "GupshupConfigError",
                     "message": "Gupshup WhatsApp not configured (missing env vars)",
@@ -360,8 +362,8 @@ def _missing_gupshup_env_keys(env_debug: Dict[str, Any]) -> list[str]:
         missing.append("GUPSHUP_API_KEY")
     if not env_debug.get("has_app_name"):
         missing.append("GUPSHUP_APP_NAME")
-    if not env_debug.get("has_src_number"):
-        missing.append("GUPSHUP_SRC_NUMBER")
+    if not env_debug.get("has_sender"):
+        missing.append("GUPSHUP_WA_SENDER")
     return missing
 
 

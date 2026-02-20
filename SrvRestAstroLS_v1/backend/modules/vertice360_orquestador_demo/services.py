@@ -27,7 +27,7 @@ def demo_db_ready() -> bool:
 def _safe_demo_phone(raw_phone: str | None) -> str:
     digits = "".join(ch for ch in str(raw_phone or "") if ch.isdigit())
     if not digits:
-        return "+4526325250"
+        return ""
     if str(raw_phone or "").strip().startswith("+"):
         return f"+{digits}"
     return f"+{digits}"
@@ -123,7 +123,7 @@ def bootstrap() -> dict[str, Any]:
     def _tx(conn: Any) -> dict[str, Any]:
         return {
             "whatsapp_demo_phone": _safe_demo_phone(
-                getattr(globalVar, "GUPSHUP_SRC_NUMBER", "4526325250") or "4526325250"
+                globalVar.get_gupshup_wa_sender_e164()
             ),
             "projects": repo.list_projects(conn),
             "marketing_assets": repo.list_marketing_assets(conn),

@@ -228,12 +228,41 @@ GUPSHUP_APP_NAME: str = _pick_env(
 GUPSHUP_API_KEY: str = _pick_env(
     GUPSHUP_API_KEY_DEV, GUPSHUP_API_KEY_STG, GUPSHUP_API_KEY_PRO
 )
-GUPSHUP_SRC_NUMBER: str = _pick_env(
-    GUPSHUP_SRC_NUMBER_DEV, GUPSHUP_SRC_NUMBER_STG, GUPSHUP_SRC_NUMBER_PRO
-)
 GUPSHUP_BASE_URL: str = _pick_env(
     GUPSHUP_BASE_URL_DEV, GUPSHUP_BASE_URL_STG, GUPSHUP_BASE_URL_PRO
 )
+
+
+def normalize_phone_e164(value: str | None) -> str:
+    """Normalize phone-like values to E.164 (+<digits>) or empty when invalid."""
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        return ""
+    if cleaned.startswith("+"):
+        cleaned = cleaned[1:]
+    digits = "".join(ch for ch in cleaned if ch.isdigit())
+    if not digits:
+        return ""
+    return f"+{digits}"
+
+
+# Canonical Gupshup sender config (single source of truth).
+GUPSHUP_WA_SENDER: str = normalize_phone_e164(
+    get_env_str("GUPSHUP_WA_SENDER", default="")
+)
+
+# Backward-compatible alias used by existing codepaths/docs.
+GUPSHUP_SRC_NUMBER: str = GUPSHUP_WA_SENDER.lstrip("+")
+
+
+def get_gupshup_wa_sender_e164() -> str:
+    """Return canonical sender in E.164 for logs/event payloads."""
+    return normalize_phone_e164(GUPSHUP_WA_SENDER)
+
+
+def get_gupshup_wa_sender_provider_value() -> str:
+    """Return sender value in provider wire format (digits-only)."""
+    return get_gupshup_wa_sender_e164().lstrip("+")
 
 
 # =========================
@@ -375,8 +404,13 @@ def meta_whatsapp_enabled() -> bool:
     )
 
 
+def gupshup_provider_requested() -> bool:
+    """True when app/key are configured (sender may still be missing)."""
+    return bool(GUPSHUP_APP_NAME and GUPSHUP_API_KEY)
+
+
 def gupshup_whatsapp_enabled() -> bool:
-    return bool(GUPSHUP_APP_NAME and GUPSHUP_API_KEY and GUPSHUP_SRC_NUMBER)
+    return bool(gupshup_provider_requested() and get_gupshup_wa_sender_provider_value())
 
 
 def boot_log() -> None:
@@ -408,13 +442,21 @@ def boot_log() -> None:
         f"meta_app_secret={mask(META_APP_SECRET_IMOTORSOFT)}"
     )
     print(
-        f"[{APP_NAME}] gupshup_app={GUPSHUP_APP_NAME} gupshup_src={GUPSHUP_SRC_NUMBER} "
+        f"[{APP_NAME}] gupshup_app={GUPSHUP_APP_NAME} "
+        f"gupshup_sender={get_gupshup_wa_sender_e164()} "
         f"gupshup_enabled={gupshup_whatsapp_enabled()}"
     )
+    if gupshup_provider_requested() and not get_gupshup_wa_sender_e164():
+        print(
+            f"[{APP_NAME}] WARNING: GUPSHUP_WA_SENDER is empty while Gupshup provider keys are configured. "
+            "Outbound send will be skipped with vera_send_ok=false."
+        )
 
 
 # Self-test block
 if __name__ == "__main__":
     print(
-        f"ENV={ENVIRONMENT} gupshup_app={GUPSHUP_APP_NAME} gupshup_src={GUPSHUP_SRC_NUMBER} gupshup_enabled={gupshup_whatsapp_enabled()}"
+        f"ENV={ENVIRONMENT} gupshup_app={GUPSHUP_APP_NAME} "
+        f"gupshup_sender={get_gupshup_wa_sender_e164()} "
+        f"gupshup_enabled={gupshup_whatsapp_enabled()}"
     )

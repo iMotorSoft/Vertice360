@@ -20,7 +20,8 @@ class GupshupConfig:
     base_url: str
     api_key: str
     app_name: str
-    src_number: str
+    sender_e164: str
+    source_number: str
 
     @classmethod
     def from_env(cls) -> "GupshupConfig":
@@ -28,7 +29,8 @@ class GupshupConfig:
             base_url=globalVar.GUPSHUP_BASE_URL,
             api_key=globalVar.GUPSHUP_API_KEY,
             app_name=globalVar.GUPSHUP_APP_NAME,
-            src_number=globalVar.GUPSHUP_SRC_NUMBER,
+            sender_e164=globalVar.get_gupshup_wa_sender_e164(),
+            source_number=globalVar.get_gupshup_wa_sender_provider_value(),
         )
 
 
@@ -58,7 +60,7 @@ class GupshupWhatsAppClient:
         payload = {
             # TODO: confirmar nombres de campos exactos en docs de Gupshup.
             "channel": "whatsapp",
-            "source": self._config.src_number,
+            "source": self._config.source_number,
             "destination": to,
             "message": {"type": "text", "text": text},
             "src.name": self._config.app_name,
@@ -69,7 +71,9 @@ class GupshupWhatsAppClient:
             response = await http_client.post(url, data=_encode_payload(payload), headers=headers, timeout=20.0)
             duration_ms = int((time.perf_counter() - started_at) * 1000)
             logger.info(
-                "GUPSHUP_HTTP_SEND url=%s status=%s duration_ms=%s",
+                "GUPSHUP_HTTP_SEND sender=%s source=%s url=%s status=%s duration_ms=%s",
+                self._config.sender_e164 or "-",
+                self._config.source_number or "-",
                 url,
                 response.status_code,
                 duration_ms,
