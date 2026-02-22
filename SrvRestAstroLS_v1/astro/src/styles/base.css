@@ -2,13 +2,112 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --brand-primary: #0050e6;
-  --brand-secondary: #ffd700;
-  --brand-accent: #0038b8;
-}
 
 body {
   font-family: "Inter", system-ui, -apple-system, sans-serif;
-  background: radial-gradient(circle at 20% 20%, #f1f5f9, #ffffff);
+  /* background: radial-gradient(circle at 20% 20%, #f1f5f9, #ffffff); */
+  background: #F5F7F8;
+}
+
+:root {
+  /* Brand colors — Vertice360 */
+  --brand-primary: #1F7A63;
+  --brand-secondary: #4FAF9A;
+  --brand-accent: #22C55E;
+
+  /* Text & UI */
+  --text-primary: #2E2E2E;
+  --text-secondary: #6B7280;
+
+  /* Backgrounds */
+  --bg-main: #F5F7F8;
+  --bg-card: #FFFFFF;
+  --bg-card-secondary: #F7F7F7;
+}
+
+h1 {
+  /* text-3xl font-bold text-emerald-900 */
+  font-weight: bold;
+  color: #055a42;
+  font-size: xx-large;
+}
+
+.btn-primary {
+  background: linear-gradient(to bottom right, #065f46, #066e4e, #047857);
+  color: #F7F7F7;
+  border-radius: 50px;
+  padding: 20px 20px;
+  box-shadow: none;
+}
+
+.btn-primary:hover {
+  background:linear-gradient(to top left, #055a42, #066e4e, #098b66);
+  color: #F7F7F7;
+}
+
+.btn-secondary {
+  background: transparent; 
+  color: var(--text-secondary); 
+  border: 2px solid var(--text-secondary);
+  border-radius: 50px;
+  padding: 20px 20px;
+  box-shadow: none;
+}
+
+.btn-secondary:hover {
+  background: #e9e7e7;
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+.card-primary {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-radius: 20px;
+  /* bg-[var(--bg-card)] --text-secondary rounded-2xl p-6 */
+}
+
+.card-accent {
+  background: linear-gradient(to bottom right, #065f46, #066e4e, #047857);
+  color: #F7F7F7;
+  border-radius: 20px;
+  /* background: radial-gradient(circle at 20% 20%, #f1f5f9, #ffffff); */
+  /*bg-gradient-to-br from-emerald-900 via-emerald-800 
+  to-emerald-700 text-emerald-50 shadow-lg*/
+}
+
+label{
+  color: var(--text-primary);
+  margin: 10px;
+}
+
+.select{
+  background: var(--bg-card-secondary);
+  border-radius: 20px;
+  padding: 5px 10px;
+  margin: 5px;
+  /* border: 2px solid #e9e7e7; */
+  color: var(--text-secondary);
+}
+
+.select:focus{
+  outline: none;
+}
+
+input{
+  padding: 10px;
+  margin: 5px;
+  color: var(--brand-primary);
+}
+
+input:focus{
+  outline: none;
+}
+
+textarea {
+  background: var(--bg-card-secondary);
+  border-radius: 10px;
+  padding: 5px;
+  margin-top: 5px;
+  color: var(--text-secondary);
 }
