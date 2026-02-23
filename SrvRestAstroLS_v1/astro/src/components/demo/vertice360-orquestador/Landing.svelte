@@ -7,29 +7,30 @@
   const waUrl = `${URL_WA_ME}/${demoPhoneWa}/?text=${encodeURIComponent(waText)}`;
 </script>
 
-<section class="mx-auto max-w-3xl space-y-6">
+
+<section class="mx-auto max-w-xl space-y-6">
   <header class="space-y-2">
     <p class="text-xs uppercase tracking-[0.25em] text-emerald-700 font-semibold">Vertice360 Demo</p>
-    <h1 class="text-2xl md:text-3xl font-bold text-slate-900">Vertice360 Orquestador</h1>
-    <p class="text-sm md:text-base text-slate-600">
+    <h1 class="text-2xl md:text-3xl">Vertice360 Orquestador</h1>
+    <p class="text-sm md:text-lg text-slate-600">
       Orquestá tus leads por WhatsApp, automatizá el seguimiento y tené control total: del anuncio al cierre.
     </p>
   </header>
 
-  <div class="card border border-base-300 bg-base-100 shadow-sm">
-    <div class="card-body gap-4">
-      <p class="text-sm md:text-base text-slate-700">Para iniciar la demo, enviá un WhatsApp a:</p>
-      <p class="text-2xl font-semibold tracking-wide text-slate-900">{demoPhoneHuman}</p>
+  <div class="card-primary">
+    <div class="card-body gap-4 md:px-8">
+      <p class="text-sm md:text-lg text-slate-700">Para iniciar la demo, enviá un WhatsApp a:</p>
+      <p class="text-md md:text-xl font-semibold tracking-wide text-slate-600">{demoPhoneHuman}</p>
       <a
         href={waUrl}
         target="_blank"
         rel="noreferrer"
-        class="btn w-full min-h-11 md:w-auto border-0 bg-[#25D366] text-white hover:bg-[#1EBE5D] inline-flex items-center justify-center gap-2"
+        class="btn-primary font-semibold h-12 inline-flex items-center justify-center gap-2 md:gap-3"
       >
         <svg
           xmlns={URL_SVG_XMLNS}
           viewBox="0 0 32 32"
-          class="h-4 w-4 fill-current"
+          class="h-5 w-5 fill-current "
           aria-hidden="true"
         >
           <path
@@ -44,35 +45,35 @@
     </div>
   </div>
 
-  <h2 class="text-base md:text-lg font-semibold text-slate-900 mb-3">
+  <h2 class="text-sm md:text-xl font-semibold text-slate-900 mb-3">
     De un mensaje a una visita confirmada y venta en camino (en vivo):
   </h2>
 
   <div class="grid gap-3 md:grid-cols-3">
-    <article class="card border border-base-300 bg-base-100 shadow-sm">
+    <article class="card-primary">
       <div class="card-body p-4">
-        <span class="badge badge-neutral w-fit">1</span>
-        <h2 class="font-semibold text-slate-900">Iniciás el contacto (WhatsApp)</h2>
+        <div class="border border-gray-300 rounded-full w-8 h-8 flex items-center justify-center">1</div>
+        <h2 class="font-semibold text-emerald-900">Iniciás el contacto (WhatsApp)</h2>
         <p class="text-sm text-slate-600">
           Enviás un mensaje con el código del proyecto. El asistente responde, hace preguntas y califica al
           interesado.
         </p>
       </div>
     </article>
-    <article class="card border border-base-300 bg-base-100 shadow-sm">
+    <article class="card-primary">
       <div class="card-body p-4">
-        <span class="badge badge-neutral w-fit">2</span>
-        <h2 class="font-semibold text-slate-900">Ves todo en el Orquestador</h2>
+        <div class="border border-gray-300 rounded-full w-8 h-8 flex items-center justify-center">2</div>
+        <h2 class="font-semibold text-emerald-900">Ves todo en el Orquestador</h2>
         <p class="text-sm text-slate-600">
           Te llega una URL para abrir el tablero y ver en tiempo real qué mensajes entran, a qué proyecto pertenecen y
           qué queda pendiente.
         </p>
       </div>
     </article>
-    <article class="card border border-base-300 bg-base-100 shadow-sm">
+    <article class="card-primary">
       <div class="card-body p-4">
-        <span class="badge badge-neutral w-fit">3</span>
-        <h2 class="font-semibold text-slate-900">Respondés como vendedor y coordinás visita</h2>
+        <div class="border border-gray-300 rounded-full w-8 h-8 flex items-center justify-center">3</div>
+        <h2 class="font-semibold text-emerald-900">Respondés como vendedor y coordinás visita</h2>
         <p class="text-sm text-slate-600">
           Desde el tablero proponés días y horarios de visita. El cliente elige una opción y queda confirmada, con
           registro y trazabilidad.

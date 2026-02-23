@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -23,6 +25,9 @@ body {
   --bg-main: #F5F7F8;
   --bg-card: #FFFFFF;
   --bg-card-secondary: #F7F7F7;
+
+  /* Typography */
+  --font-poppins: 'Poppins', system-ui, -apple-system, sans-serif;
 }
 
 h1 {
@@ -30,6 +35,7 @@ h1 {
   font-weight: bold;
   color: #055a42;
   font-size: xx-large;
+  font-family: var(--font-poppins);
 }
 
 .btn-primary {
