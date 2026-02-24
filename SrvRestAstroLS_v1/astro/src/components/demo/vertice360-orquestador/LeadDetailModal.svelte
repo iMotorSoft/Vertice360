@@ -48,10 +48,11 @@
   };
 
   const roleBadgeClass = (role) => {
-    if (role === "Cliente") return "badge-primary";
-    if (role === "Asesor") return "badge-success";
-    if (role === "Supervisor") return "badge-warning";
-    return "badge-neutral";
+    if (role === "Cliente") return "bg-pink-100 text-pink-700 border-pink-200";
+    if (role === "Asesor") return "bg-teal-100 text-teal-700 border-teal-200";
+    if (role === "Supervisor")
+      return "bg-amber-100 text-amber-700 border-amber-200";
+    return "bg-slate-100 text-slate-700 border-slate-200";
   };
 
   const alignmentClass = (role) => {
@@ -61,14 +62,22 @@
   };
 
   const bubbleClass = (role) => {
-    if (role === "Cliente") return "bg-base-200 text-slate-900";
-    if (role === "Asesor") return "bg-emerald-100 text-emerald-900";
-    if (role === "Supervisor") return "bg-amber-100 text-amber-900";
-    return "bg-slate-100 text-slate-800";
+    const base = "shadow-sm border rounded-[22px]";
+    if (role === "Cliente")
+      return `${base} bg-white border-slate-200 text-slate-600`;
+    if (role === "Asesor")
+      return `${base} bg-emerald-50 border-emerald-100 text-slate-600`;
+    if (role === "Supervisor")
+      return `${base} bg-amber-50 border-amber-100 text-slate-600`;
+    if (role === "AI")
+      return `${base} bg-slate-50 border-slate-100 text-slate-600`;
+    return `${base} bg-slate-100 border-slate-200 text-slate-600`;
   };
 
   const buildConversation = (row) => {
-    const baseMs = new Date(row?.lastActivityAt || row?.createdAt || Date.now()).getTime();
+    const baseMs = new Date(
+      row?.lastActivityAt || row?.createdAt || Date.now(),
+    ).getTime();
     const entry = (id, role, text, minutesBefore, trace) => ({
       id: `${row?.id || "lead"}-${id}`,
       role,
@@ -193,7 +202,9 @@
     draftMessage = "";
 
     if (Array.isArray(messages)) {
-      conversation = messages.map((item, index) => normalizeIncomingMessage(item, index));
+      conversation = messages.map((item, index) =>
+        normalizeIncomingMessage(item, index),
+      );
       return;
     }
 
@@ -202,14 +213,18 @@
 
   $effect(() => {
     if (!open || !lead?.id || !Array.isArray(messages)) return;
-    conversation = messages.map((item, index) => normalizeIncomingMessage(item, index));
+    conversation = messages.map((item, index) =>
+      normalizeIncomingMessage(item, index),
+    );
   });
 
   const appendSupervisorMessage = async () => {
     const trimmed = draftMessage.trim();
     if (!trimmed || !lead || supervisorSending) return;
 
-    const target = recipientOptions(lead).find((item) => item.key === recipientTarget);
+    const target = recipientOptions(lead).find(
+      (item) => item.key === recipientTarget,
+    );
 
     if (typeof onSupervisorSend === "function") {
       await onSupervisorSend({
@@ -244,36 +259,59 @@
   };
 </script>
 
-<dialog class={`modal ${open ? "modal-open" : ""}`} aria-label="Detalle de lead">
-  <div class="modal-box h-screen w-screen max-w-none rounded-none p-0 md:h-[92vh] md:w-11/12 md:max-w-5xl md:rounded-2xl flex flex-col overflow-hidden">
-    <header class="sticky top-0 z-20 border-b border-base-300 bg-base-100 px-4 py-3 md:px-5">
+<dialog
+  class={`modal ${open ? "modal-open" : ""}`}
+  aria-label="Detalle de lead"
+>
+  <div
+    class="modal-box h-screen w-screen max-w-none rounded-none p-0 md:h-[92vh] md:w-full
+    md:max-w-2xl md:rounded-2xl flex flex-col overflow-hidden space-y-4 px-2 py-1"
+  >
+    <header
+      class="sticky top-0 z-20 border-b border-base-300 bg-base-100 px-4 py-3 md:px-5"
+    >
       <button
         type="button"
-        class="btn btn-ghost btn-sm absolute right-2 top-2 md:right-3 md:top-3"
+        class="btn btn-sm min-h-11 md:btn-xs md:min-h-[28px] hover:bg-gray-200 rounded-full p-2 absolute right-3 top-3"
         aria-label="Cerrar detalle"
         onclick={handleClose}
       >
         ✕
       </button>
-      <h3 class="text-lg font-semibold text-slate-900">Detalle de lead</h3>
-      <p class="mt-1 text-sm text-slate-700 break-words">
+      <h1 class="">Detalle de lead</h1>
+      <p class="mt-1 text-base text-slate-700 break-words">
         {lead?.proyecto || "--"} • {lead?.cliente || "--"}
       </p>
       <div class="mt-2 flex flex-wrap items-center gap-2 pr-8">
-        <span class="badge badge-outline">{lead?.estado || "--"}</span>
-        <span class="badge badge-warning">Supervisor (Demo)</span>
+        <span
+          class="bg-violet-100 text-violet-700 border-violet-200 px-2 rounded-full"
+          >{lead?.estado || "--"}</span
+        >
+        <span
+          class="bg-amber-100 text-amber-700 border-amber-200 px-2 rounded-full"
+          >Supervisor (Demo)</span
+        >
         <span class="text-xs text-slate-600">
-          Asesor asignado: <span class="font-medium">{getAdvisor(lead).name}</span>
+          Asesor asignado: <span class="font-medium"
+            >{getAdvisor(lead).name}</span
+          >
         </span>
       </div>
     </header>
 
-    <div class="flex-1 overflow-y-auto px-4 py-4 md:px-5" bind:this={conversationViewport}>
+    <div
+      class="flex-1 overflow-y-auto px-4 py-4 md:px-5"
+      bind:this={conversationViewport}
+    >
       <div class="mb-3 flex items-center justify-between">
-        <h4 class="text-sm font-semibold uppercase tracking-wide text-slate-600">
+        <h4
+          class="text-sm font-semibold uppercase tracking-wide text-slate-600"
+        >
           Conversación
         </h4>
-        <span class="text-xs text-slate-500">{conversation.length} mensajes</span>
+        <span class="text-xs text-slate-500"
+          >{conversation.length} mensajes</span
+        >
       </div>
 
       {#if loadingMessages}
@@ -287,16 +325,48 @@
       {:else}
         <div class="space-y-3 pb-4">
           {#each conversation as item}
-            <article class={`flex ${alignmentClass(item.role)}`}>
-              <div class={`max-w-[92%] md:max-w-[76%] rounded-2xl px-3 py-2 ${bubbleClass(item.role)}`}>
-                <div class="mb-1 flex items-center gap-2">
-                  <span class={`badge badge-xs whitespace-nowrap ${roleBadgeClass(item.role)}`}>
+            <article class={`flex ${alignmentClass(item.role)} mb-1`}>
+              <div
+                class={`max-w-[80%] md:max-w-[65%] px-4 py-2.5 ${bubbleClass(item.role)}`}
+              >
+                <div class="mb-1 flex items-center justify-between gap-4">
+                  <span
+                    class={`badge badge-xs font-semibold py-1.5 px-2 border-none ${roleBadgeClass(item.role)}`}
+                  >
                     {item.role}
                   </span>
-                  <span class="text-[11px] text-slate-500">{formatClock(item.timestamp)}</span>
+                  <span
+                    class={`text-[10px] uppercase font-medium tracking-tight text-slate-400`}
+                  >
+                    {formatClock(item.timestamp)}
+                  </span>
                 </div>
-                <p class="text-sm whitespace-pre-wrap break-words">{item.text}</p>
-                <p class="mt-1 text-[11px] text-slate-500">{item.trace}</p>
+                <p
+                  class="text-[14px] leading-relaxed whitespace-pre-wrap break-words"
+                >
+                  {item.text}
+                </p>
+                {#if item.trace}
+                  <div
+                    class="mt-2 pt-1 border-t border-slate-100/50 text-[10px] italic flex items-center gap-1 text-slate-400"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="10"
+                      height="10"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      ><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline
+                        points="22 4 12 14.01 9 11.01"
+                      /></svg
+                    >
+                    {item.trace}
+                  </div>
+                {/if}
               </div>
             </article>
           {/each}
@@ -327,7 +397,7 @@
           <label class="form-control">
             <span class="label-text text-xs">Mensaje del supervisor</span>
             <textarea
-              class="textarea textarea-bordered min-h-24"
+              class="textarea w-full textarea-bordered min-h-18"
               bind:value={draftMessage}
               placeholder="Escribí una intervención con trazabilidad..."
               disabled={supervisorSending}

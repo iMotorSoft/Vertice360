@@ -118,10 +118,13 @@
   const isVisitConfirmed = (estado) => estado === "Visita confirmada";
   const isPendingVisit = (estado) => estado === "Pendiente de visita";
   const isGeneralFollowUp = (estado) =>
-    estado === "Nuevo" || estado === "En seguimiento" || estado === "Esperando respuesta";
+    estado === "Nuevo" ||
+    estado === "En seguimiento" ||
+    estado === "Esperando respuesta";
 
   const actionClass = (tone) => {
-    const base = "btn btn-sm min-h-11 md:btn-xs md:min-h-[28px] whitespace-nowrap";
+    const base =
+      "btn btn-sm min-h-11 md:btn-xs md:min-h-[28px] whitespace-nowrap";
     if (tone === "primary") return `${base} btn-primary`;
     if (tone === "success") return `${base} btn-success`;
     if (tone === "outline") return `${base} btn-outline`;
@@ -138,7 +141,9 @@
 
     const activityAt = row.lastActivityAt || row.createdAt;
     return {
-      primary: activityAt ? `Último: ${formatDateTime(activityAt)}` : "Sin actividad",
+      primary: activityAt
+        ? `Último: ${formatDateTime(activityAt)}`
+        : "Sin actividad",
       secondary:
         row.estado === STAGE_WAITING_CONFIRMATION && row.nextVisitProposalAt
           ? `Propuesta: ${formatDateTime(row.nextVisitProposalAt)}`
@@ -149,14 +154,18 @@
   const mapAds = (bootstrapPayload) => {
     const projects = bootstrapPayload?.projects || [];
     const assets = bootstrapPayload?.marketing_assets || [];
-    const projectById = new Map(projects.map((project) => [String(project.id), project]));
+    const projectById = new Map(
+      projects.map((project) => [String(project.id), project]),
+    );
 
     if (!assets.length) {
       return projects.map((project) => ({
         id: `project-${project.id}`,
         title: project.code || project.name || "Proyecto",
         line1: project.description || "Proyecto activo de Vertice360.",
-        line2: project.name ? `Proyecto: ${project.name}` : "Disponible para consulta.",
+        line2: project.name
+          ? `Proyecto: ${project.name}`
+          : "Disponible para consulta.",
         chips: project.tags || [],
         projectCode: project.code || "",
         whatsappPrefill: project.code || "",
@@ -167,7 +176,8 @@
       const linkedProject = projectById.get(String(asset.project_id));
       return {
         id: String(asset.id),
-        title: asset.title || asset.project_code || linkedProject?.code || "Anuncio",
+        title:
+          asset.title || asset.project_code || linkedProject?.code || "Anuncio",
         line1:
           asset.short_copy ||
           linkedProject?.description ||
@@ -179,7 +189,11 @@
             : "",
         chips: Array.isArray(asset.chips) ? asset.chips : [],
         projectCode: asset.project_code || linkedProject?.code || "",
-        whatsappPrefill: asset.whatsapp_prefill || asset.project_code || linkedProject?.code || "",
+        whatsappPrefill:
+          asset.whatsapp_prefill ||
+          asset.project_code ||
+          linkedProject?.code ||
+          "",
       };
     });
   };
@@ -189,10 +203,22 @@
     return [
       { label: "Tickets totales", value: String(raw.tickets_total ?? 0) },
       { label: "Nuevos", value: String(raw.tickets_nuevo ?? 0) },
-      { label: "En seguimiento", value: String(raw.tickets_en_seguimiento ?? 0) },
-      { label: "Pend. visita", value: String(raw.tickets_pendiente_visita ?? 0) },
-      { label: "Esperando conf.", value: String(raw.tickets_esperando_confirmacion ?? 0) },
-      { label: "Visitas confirmadas", value: String(raw.tickets_visita_confirmada ?? 0) },
+      {
+        label: "En seguimiento",
+        value: String(raw.tickets_en_seguimiento ?? 0),
+      },
+      {
+        label: "Pend. visita",
+        value: String(raw.tickets_pendiente_visita ?? 0),
+      },
+      {
+        label: "Esperando conf.",
+        value: String(raw.tickets_esperando_confirmacion ?? 0),
+      },
+      {
+        label: "Visitas confirmadas",
+        value: String(raw.tickets_visita_confirmada ?? 0),
+      },
     ];
   };
 
@@ -235,7 +261,8 @@
 
   const setRowProposalWindow = (ticketId, proposal) => {
     if (!ticketId) return;
-    const nextOption = proposal?.option1 || proposal?.option2 || proposal?.option3 || null;
+    const nextOption =
+      proposal?.option1 || proposal?.option2 || proposal?.option3 || null;
     if (!nextOption) return;
 
     conversations = conversations.map((row) =>
@@ -260,7 +287,8 @@
     );
   };
 
-  const hasActiveProposal = (ticketId) => Boolean(activeProposalByTicket[ticketId]?.id);
+  const hasActiveProposal = (ticketId) =>
+    Boolean(activeProposalByTicket[ticketId]?.id);
   const detailLoading = (ticketId) => Boolean(detailLoadingByTicket[ticketId]);
 
   const getRowActions = (row) => {
@@ -275,15 +303,25 @@
         id: "confirm",
         label: "Confirmar",
         tone: "success",
-        disabled: !hasActiveProposal(row.ticketId) || detailLoading(row.ticketId) || isActionRunning,
+        disabled:
+          !hasActiveProposal(row.ticketId) ||
+          detailLoading(row.ticketId) ||
+          isActionRunning,
       });
     } else if (isVisitConfirmed(estado)) {
-      quickActions.push({ id: "reschedule", label: "Reagendar", tone: "outline" });
+      quickActions.push({
+        id: "reschedule",
+        label: "Reagendar",
+        tone: "outline",
+      });
     } else if (isGeneralFollowUp(estado)) {
       // Solo "Ver" en estados de seguimiento general.
     }
 
-    return [...quickActions.slice(0, 2), { id: "view", label: "Ver", tone: "ghost", disabled: false }];
+    return [
+      ...quickActions.slice(0, 2),
+      { id: "view", label: "Ver", tone: "ghost", disabled: false },
+    ];
   };
 
   const resetUiState = () => {
@@ -297,7 +335,10 @@
     detailMessagesLoading = false;
   };
 
-  const ensureTicketDetail = async (ticketId, { withMessages = false, force = false, silent = false } = {}) => {
+  const ensureTicketDetail = async (
+    ticketId,
+    { withMessages = false, force = false, silent = false } = {},
+  ) => {
     const cleanTicketId = String(ticketId || "").trim();
     if (!cleanTicketId) return null;
 
@@ -318,11 +359,16 @@
         [cleanTicketId]: payload?.active_proposal || null,
       };
       setRowProposalWindow(cleanTicketId, payload?.active_proposal);
-      setRowVisitAt(cleanTicketId, payload?.ticket?.visit_scheduled_at || payload?.context?.visit_scheduled_at);
+      setRowVisitAt(
+        cleanTicketId,
+        payload?.ticket?.visit_scheduled_at ||
+          payload?.context?.visit_scheduled_at,
+      );
       return payload;
     } catch (err) {
       if (!silent) {
-        errorMessage = err?.message || "No se pudo cargar el detalle del ticket.";
+        errorMessage =
+          err?.message || "No se pudo cargar el detalle del ticket.";
       }
       return null;
     } finally {
@@ -333,10 +379,18 @@
   };
 
   const preloadWaitingTicketDetails = async (rows) => {
-    const waiting = (rows || []).filter((row) => isWaitingConfirmation(row.estado) && row.ticketId);
+    const waiting = (rows || []).filter(
+      (row) => isWaitingConfirmation(row.estado) && row.ticketId,
+    );
     if (!waiting.length) return;
     await Promise.allSettled(
-      waiting.map((row) => ensureTicketDetail(row.ticketId, { withMessages: false, force: false, silent: true })),
+      waiting.map((row) =>
+        ensureTicketDetail(row.ticketId, {
+          withMessages: false,
+          force: false,
+          silent: true,
+        }),
+      ),
     );
   };
 
@@ -347,7 +401,10 @@
     try {
       const payload = await bootstrap({ cliente });
       ads = mapAds(payload);
-      const digits = String(payload?.whatsapp_demo_phone || "").replace(/\D+/g, "");
+      const digits = String(payload?.whatsapp_demo_phone || "").replace(
+        /\D+/g,
+        "",
+      );
       if (digits) {
         demoWhatsAppPhone = digits;
       }
@@ -370,7 +427,9 @@
     try {
       const payload = await dashboard({ cliente });
       kpis = mapKpis(payload?.kpis);
-      const rows = (payload?.tickets || []).map((row) => mapConversationRow(row));
+      const rows = (payload?.tickets || []).map((row) =>
+        mapConversationRow(row),
+      );
       conversations = rows;
       await preloadWaitingTicketDetails(rows);
     } catch (err) {
@@ -382,14 +441,25 @@
     }
   };
 
-  const refreshAfterAction = async (ticketId, { reloadDetail = false } = {}) => {
+  const refreshAfterAction = async (
+    ticketId,
+    { reloadDetail = false } = {},
+  ) => {
     await loadDashboard({ silent: true });
 
     if (ticketId) {
-      await ensureTicketDetail(ticketId, { withMessages: reloadDetail, force: true, silent: true });
+      await ensureTicketDetail(ticketId, {
+        withMessages: reloadDetail,
+        force: true,
+        silent: true,
+      });
     }
 
-    if (reloadDetail && detailModalOpen && selectedLead?.ticketId === ticketId) {
+    if (
+      reloadDetail &&
+      detailModalOpen &&
+      selectedLead?.ticketId === ticketId
+    ) {
       const detail = detailByTicket[ticketId];
       detailMessages = mapMessages(detail?.messages || []);
       const row = conversations.find((item) => item.ticketId === ticketId);
@@ -421,7 +491,11 @@
 
     let activeProposal = activeProposalByTicket[row.ticketId] || null;
     if ((mode === "ver_propuesta" || mode === "reagendar") && !activeProposal) {
-      const detail = await ensureTicketDetail(row.ticketId, { withMessages: false, force: true, silent: true });
+      const detail = await ensureTicketDetail(row.ticketId, {
+        withMessages: false,
+        force: true,
+        silent: true,
+      });
       activeProposal = detail?.active_proposal || null;
     }
 
@@ -482,7 +556,9 @@
       option1: toIsoOrNull(payload?.opcion1),
       option2: toIsoOrNull(payload?.opcion2),
       option3: toIsoOrNull(payload?.opcion3),
-      message_out: String(payload?.mensaje || "").trim() || "Mensaje enviado desde orquestador live.",
+      message_out:
+        String(payload?.mensaje || "").trim() ||
+        "Mensaje enviado desde orquestador live.",
     };
 
     try {
@@ -496,9 +572,12 @@
         });
         notice = `Opciones enviadas para ${payload?.cliente || "cliente"}.`;
       }
-      await refreshAfterAction(selectedConversation.ticketId, { reloadDetail: true });
+      await refreshAfterAction(selectedConversation.ticketId, {
+        reloadDetail: true,
+      });
     } catch (err) {
-      errorMessage = err?.message || "No se pudo enviar la propuesta de visita.";
+      errorMessage =
+        err?.message || "No se pudo enviar la propuesta de visita.";
       throw err;
     } finally {
       isActionRunning = false;
@@ -520,7 +599,11 @@
     errorMessage = "";
 
     try {
-      const detail = await ensureTicketDetail(ticketId, { withMessages: false, force: true, silent: false });
+      const detail = await ensureTicketDetail(ticketId, {
+        withMessages: false,
+        force: true,
+        silent: false,
+      });
       const proposal = detail?.active_proposal;
       if (!proposal?.id) {
         throw new Error("No hay propuesta activa para confirmar.");
@@ -562,7 +645,8 @@
       notice = "Mensaje de supervisor enviado.";
       await refreshAfterAction(ticketId, { reloadDetail: true });
     } catch (err) {
-      errorMessage = err?.message || "No se pudo enviar el mensaje del supervisor.";
+      errorMessage =
+        err?.message || "No se pudo enviar el mensaje del supervisor.";
       throw err;
     } finally {
       supervisorSending = false;
@@ -578,7 +662,9 @@
     }
 
     if (actionId === "visit") {
-      const mode = isWaitingConfirmation(row.estado) ? "ver_propuesta" : "proponer";
+      const mode = isWaitingConfirmation(row.estado)
+        ? "ver_propuesta"
+        : "proponer";
       await openVisitModal(row, mode);
       return;
     }
@@ -648,7 +734,9 @@
       <div class="flex gap-4">
         <div class="w-1.5 bg-primary rounded-full self-stretch"></div>
         <div class="min-w-0 flex-1">
-          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div
+            class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+          >
             <div class="min-w-0 flex items-start gap-3">
               <div
                 class="flex h-10 w-10 md:h-12 md:w-12 items-center justify-center rounded-xl bg-primary/10 text-primary text-sm md:text-base font-bold"
@@ -656,9 +744,14 @@
                 V
               </div>
               <div class="min-w-0">
-                <h1 class="text-2xl font-bold leading-tight text-slate-900">Orquestador</h1>
-                <p class="mt-1 text-sm text-base-content/60 break-all sm:break-normal">
-                  Cliente activo: {normalizeClienteDisplay(cliente) || "Sin cliente"}
+                <h1 class="text-2xl font-bold leading-tight text-slate-900">
+                  Orquestador
+                </h1>
+                <p
+                  class="mt-1 text-sm text-base-content/60 break-all sm:break-normal"
+                >
+                  Cliente activo: {normalizeClienteDisplay(cliente) ||
+                    "Sin cliente"}
                 </p>
               </div>
             </div>
@@ -734,23 +827,22 @@
                   {/each}
                 </div>
                 <a
-                  href={buildWhatsAppUrl(ad.whatsappPrefill || ad.projectCode || ad.title)}
+                  href={buildWhatsAppUrl(
+                    ad.whatsappPrefill || ad.projectCode || ad.title,
+                  )}
                   target="_blank"
                   rel="noreferrer"
                   class="btn btn-sm min-h-11 border-0 bg-[#25D366] text-white hover:bg-[#1EBE5D] inline-flex items-center gap-2"
                 >
                   <svg
                     xmlns={URL_SVG_XMLNS}
-                    viewBox="0 0 32 32"
+                    viewBox="0 0 24 24"
                     class="h-4 w-4 fill-current"
                     aria-hidden="true"
                   >
                     <path
-                      d="M19.1 17.2c-.3-.2-1.7-.8-1.9-.9-.3-.1-.5-.2-.8.2-.2.3-.9.9-1.1 1.1-.2.2-.4.2-.7.1-.3-.2-1.3-.5-2.5-1.6-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.7.1-.1.3-.3.4-.5.1-.1.2-.3.3-.5.1-.2 0-.4 0-.5 0-.1-.8-1.9-1.1-2.6-.3-.7-.6-.6-.8-.6h-.7c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.3 0 1.3 1 2.6 1.1 2.8.1.2 1.9 3 4.7 4.2 2.8 1.2 2.8.8 3.4.8.6 0 1.9-.8 2.2-1.5.3-.8.3-1.4.2-1.5-.1-.2-.3-.2-.6-.4z"
-                    ></path>
-                    <path
-                      d="M16 3C8.8 3 3 8.8 3 16c0 2.3.6 4.5 1.8 6.4L3 29l6.8-1.8c1.8 1 3.9 1.5 6.2 1.5 7.2 0 13-5.8 13-13S23.2 3 16 3zm0 23.4c-2 0-4-.5-5.7-1.5l-.4-.2-4 1 1.1-3.9-.3-.4c-1.1-1.7-1.6-3.7-1.6-5.8 0-5.9 4.9-10.8 10.9-10.8s10.8 4.8 10.8 10.8S21.9 26.4 16 26.4z"
-                    ></path>
+                      d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"
+                    />
                   </svg>
                   Enviar WhatsApp
                 </a>
@@ -770,7 +862,9 @@
       <div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
         {#each kpis as kpi}
           <div class="rounded-2xl border border-base-300 bg-base-100 p-3">
-            <p class="text-xs uppercase tracking-wide text-slate-500">{kpi.label}</p>
+            <p class="text-xs uppercase tracking-wide text-slate-500">
+              {kpi.label}
+            </p>
             <p class="mt-1 text-2xl font-bold text-slate-900">{kpi.value}</p>
           </div>
         {/each}
@@ -781,7 +875,9 @@
   <section class="card border border-base-300 bg-base-100 shadow-sm">
     <div class="card-body p-4 md:p-5 gap-3">
       <div class="flex items-center justify-between gap-3">
-        <h2 class="text-base md:text-lg font-semibold text-slate-900">Conversaciones y estado</h2>
+        <h2 class="text-base md:text-lg font-semibold text-slate-900">
+          Conversaciones y estado
+        </h2>
         {#if isLoadingDashboard}
           <span class="loading loading-spinner loading-sm"></span>
         {/if}
@@ -789,14 +885,20 @@
 
       <div class="md:hidden space-y-3">
         {#each conversations as row}
-          <article class="rounded-2xl border border-base-300 bg-base-100 p-3 space-y-2">
+          <article
+            class="rounded-2xl border border-base-300 bg-base-100 p-3 space-y-2"
+          >
             <div class="flex items-start justify-between gap-2">
               <div>
-                <p class="text-sm font-semibold text-slate-900">{row.proyecto}</p>
+                <p class="text-sm font-semibold text-slate-900">
+                  {row.proyecto}
+                </p>
                 <p class="text-xs text-slate-500">{row.cliente}</p>
               </div>
               <div class="flex items-center gap-2">
-                <span class={`badge badge-sm whitespace-nowrap ${estadoBadge(row.estado)}`}>
+                <span
+                  class={`badge badge-sm whitespace-nowrap ${estadoBadge(row.estado)}`}
+                >
                   {estadoLabel(row.estado)}
                 </span>
               </div>
@@ -807,8 +909,12 @@
               {row.ultimoMensaje}
             </p>
             <div class="space-y-1">
-              <p class="text-xs text-slate-600">{getConversationDateInfo(row).primary}</p>
-              <p class="text-xs text-slate-500 min-h-4">{getConversationDateInfo(row).secondary || "\u00A0"}</p>
+              <p class="text-xs text-slate-600">
+                {getConversationDateInfo(row).primary}
+              </p>
+              <p class="text-xs text-slate-500 min-h-4">
+                {getConversationDateInfo(row).secondary || "\u00A0"}
+              </p>
             </div>
             <div class="flex flex-col gap-2">
               {#if getRowActions(row).length === 0}
@@ -820,7 +926,8 @@
                     class={actionClass(action.tone)}
                     onclick={() => executeConversationAction(action.id, row)}
                     disabled={Boolean(action.disabled)}
-                    title={action.id === "confirm" && !hasActiveProposal(row.ticketId)
+                    title={action.id === "confirm" &&
+                    !hasActiveProposal(row.ticketId)
                       ? "No hay propuesta activa para confirmar"
                       : ""}
                   >
@@ -843,26 +950,38 @@
                 <th class="w-[190px] px-3 py-3">Estado</th>
                 <th class="w-[180px] px-3 py-3">Fecha/Hora</th>
                 <th class="w-[280px] px-3 py-3">Último mensaje</th>
-                <th class="w-[220px] min-w-[220px] px-3 py-3 text-right">Acción</th>
+                <th class="w-[220px] min-w-[220px] px-3 py-3 text-right"
+                  >Acción</th
+                >
               </tr>
             </thead>
             <tbody>
               {#each conversations as row}
                 <tr>
-                  <td class="px-3 py-3 font-medium text-slate-900 align-top">{row.proyecto}</td>
-                  <td class="px-3 py-3 whitespace-nowrap align-top">{row.cliente}</td>
+                  <td class="px-3 py-3 font-medium text-slate-900 align-top"
+                    >{row.proyecto}</td
+                  >
+                  <td class="px-3 py-3 whitespace-nowrap align-top"
+                    >{row.cliente}</td
+                  >
                   <td class="px-3 py-3 align-top">
                     <div class="flex items-center gap-2">
-                      <span class={`badge badge-sm whitespace-nowrap ${estadoBadge(row.estado)}`}>
+                      <span
+                        class={`badge badge-sm whitespace-nowrap ${estadoBadge(row.estado)}`}
+                      >
                         {estadoLabel(row.estado)}
                       </span>
                     </div>
                   </td>
                   <td class="px-3 py-3 align-top">
-                    <p class="text-sm text-slate-800 leading-5 whitespace-nowrap">
+                    <p
+                      class="text-sm text-slate-800 leading-5 whitespace-nowrap"
+                    >
                       {getConversationDateInfo(row).primary}
                     </p>
-                    <p class="text-xs text-slate-500 leading-5 min-h-5 whitespace-nowrap">
+                    <p
+                      class="text-xs text-slate-500 leading-5 min-h-5 whitespace-nowrap"
+                    >
                       {getConversationDateInfo(row).secondary || "\u00A0"}
                     </p>
                   </td>
@@ -880,9 +999,11 @@
                           <button
                             type="button"
                             class={actionClass(action.tone)}
-                            onclick={() => executeConversationAction(action.id, row)}
+                            onclick={() =>
+                              executeConversationAction(action.id, row)}
                             disabled={Boolean(action.disabled)}
-                            title={action.id === "confirm" && !hasActiveProposal(row.ticketId)
+                            title={action.id === "confirm" &&
+                            !hasActiveProposal(row.ticketId)
                               ? "No hay propuesta activa para confirmar"
                               : ""}
                           >
@@ -922,7 +1043,7 @@
   lead={selectedLead}
   messages={detailMessages}
   loadingMessages={detailMessagesLoading}
-  supervisorSending={supervisorSending}
+  {supervisorSending}
   onSupervisorSend={handleSupervisorSend}
   onClose={closeLeadDetail}
 />
