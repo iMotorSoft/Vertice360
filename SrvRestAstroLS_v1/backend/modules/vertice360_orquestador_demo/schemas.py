@@ -13,6 +13,10 @@ class IngestMessageRequest(BaseModel):
     source: str | None = None
 
 
+class AdminResetPhoneRequest(BaseModel):
+    phone: str = Field(..., min_length=3)
+
+
 class VisitProposeRequest(BaseModel):
     ticket_id: str = Field(..., min_length=1)
     advisor_name: str | None = None

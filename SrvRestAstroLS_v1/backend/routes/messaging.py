@@ -34,6 +34,7 @@ from backend.modules.messaging.providers.gupshup.whatsapp.mapper import (
 from backend.modules.messaging.providers.registry import normalize_provider
 from backend.modules.agui_stream import broadcaster
 from backend.modules.vertice360_ai_workflow_demo.bridge import maybe_start_ai_workflow_from_inbound
+from backend.modules.vertice360_orquestador_demo import services as orquestador_demo_services
 from backend.modules.vertice360_workflow_demo.services import process_inbound_message
 from backend.modules.vertice360_workflow_demo import events as workflow_events
 from backend.modules.vertice360_workflow_demo import store as workflow_store
@@ -648,6 +649,9 @@ class GupshupWhatsAppWebhookController(Controller):
         inbound_messages = gupshup_parse_inbound(payload)
         status_updates = gupshup_parse_status(payload)
 
+        vera_send_ok_all = True
+        routed_message_count = 0
+
         for message in inbound_messages:
             message_id = message.message_id or f"gupshup-noid-{uuid.uuid4().hex[:8]}"
             correlation_id = f"gupshup_whatsapp:{message_id}"
@@ -668,52 +672,54 @@ class GupshupWhatsAppWebhookController(Controller):
             ticket_id = None
             sanitized_from = "".join(filter(str.isdigit, message.from_ or message.wa_id or ""))
             sanitized_to = "".join(filter(str.isdigit, message.to or ""))
-
-            wf_inbound = {
-                "provider": "gupshup_whatsapp",
-                "app": gupshup_app,
-                "channel": "whatsapp",
-                "from": sanitized_from,
-                "to": sanitized_to,
-                "messageId": message_id,
-                "text": message.text or "",
-                "timestamp": _to_epoch_ms(message.timestamp),
-                "mediaCount": 0,
-            }
-            logger.info(
-                "GUPSHUP_INBOUND_ACCEPTED correlation_id=%s received_at_ms=%s message_id=%s user_phone=%s",
-                correlation_id,
-                wf_inbound["timestamp"],
-                message_id,
-                sanitized_from,
-            )
+            sanitized_phone = f"+{sanitized_from}" if sanitized_from else ""
+            message_text = str(message.text or "").strip()
 
             try:
-                wf_started_at = time.perf_counter()
-                wf_result = await process_inbound_message(wf_inbound)
-                workflow_ms = int((time.perf_counter() - wf_started_at) * 1000)
-                ticket_id = wf_result.get("ticketId")
                 logger.info(
-                    "GUPSHUP_INBOUND_PROCESSED correlation_id=%s ticket_id=%s workflow_ms=%s duplicate=%s actions=%s",
+                    "GUPSHUP_ROUTE_DECISION route=orquestador event_type=message phone=%s message_id=%s",
+                    sanitized_phone or "-",
+                    message_id,
+                )
+                orq_started_at = time.perf_counter()
+                orq_result = await orquestador_demo_services.ingest_from_provider(
+                    user_phone=sanitized_phone,
+                    text=message_text,
+                    provider="gupshup_whatsapp",
+                    provider_message_id=message_id,
+                    provider_meta={
+                        "app": gupshup_app,
+                        "channel": "whatsapp",
+                        "from": sanitized_phone,
+                        "to": f"+{sanitized_to}" if sanitized_to else None,
+                    },
+                )
+                orq_ms = int((time.perf_counter() - orq_started_at) * 1000)
+                ticket_id = str(orq_result.get("ticket_id") or "")
+                vera_send_ok = bool(orq_result.get("vera_send_ok"))
+                vera_send_ok_all = vera_send_ok_all and vera_send_ok
+                routed_message_count += 1
+                logger.info(
+                    "GUPSHUP_INBOUND_PROCESSED correlation_id=%s route=orquestador ticket_id=%s orq_ms=%s vera_send_ok=%s",
                     correlation_id,
                     ticket_id or "-",
-                    workflow_ms,
-                    bool(wf_result.get("duplicate")),
-                    wf_result.get("actions") or [],
+                    orq_ms,
+                    vera_send_ok,
                 )
             except Exception as exc:  # noqa: BLE001
+                vera_send_ok_all = False
                 logger.exception(
                     "GUPSHUP_INBOUND_FAILED correlation_id=%s message_id=%s user_phone=%s error=%s",
                     correlation_id,
                     message_id,
-                    sanitized_from,
+                    sanitized_phone or sanitized_from,
                     exc,
                 )
                 error_value = _compact_value(
                     {
-                        "ticketId": wf_inbound.get("ticketId"),
+                        "ticketId": ticket_id or None,
                         "messageId": message_id,
-                        "from": message.from_,
+                        "from": sanitized_phone or message.from_,
                         "error": str(exc),
                     }
                 )
@@ -747,7 +753,9 @@ class GupshupWhatsAppWebhookController(Controller):
                 _custom_event("messaging.status", value, status.message_id),
             )
 
-        return {"ok": True}
+        if routed_message_count == 0:
+            return {"ok": True}
+        return {"ok": True, "routed": "orquestador", "vera_send_ok": vera_send_ok_all}
 
 
 messaging_router = Router(

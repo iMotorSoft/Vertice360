@@ -46,3 +46,21 @@ Notas:
    - `import('/src/components/global.js').then(async (m) => { const r = await fetch(`${m.getRestBaseUrl()}/api/demo/vertice360-orquestador/bootstrap`); console.log(await r.json()); })`
 4. Verificar bootstrap vía cliente API (mismo patrón LIVE):
    - `Promise.all([import('/src/components/global.js'), import('/src/lib/vertice360_orquestador/api.js')]).then(async ([g, api]) => { console.log(g.getRestBaseUrl()); console.log(await api.bootstrap({ cliente: '5491130946950' })); })`
+
+### Validación botón "Enviar WhatsApp" (LIVE)
+
+1. Levantar backend demo en `7062` y Astro en `3062`.
+2. Abrir `http://localhost:3062/demo/vertice360-orquestador/?cliente=5491130946950`.
+3. Confirmar que `bootstrap` trae `whatsapp_demo_phone` y que las cards de "Ejemplos de publicidad" quedan habilitadas.
+4. Click en "Enviar WhatsApp" de una card:
+   - El destino debe ser el número demo del orquestador (`whatsapp_demo_phone`, no el cliente).
+   - El texto prellenado debe seguir este formato:
+     - `Hola, vengo por un anuncio. Me interesa BULNES_966_ALMAGRO.`
+     - o con barrio: `Hola, vengo por un anuncio. Me interesa BULNES_966_ALMAGRO (Almagro).`
+5. Validar en backend:
+   - `GUPSHUP_ROUTE_DECISION route=orquestador ...`
+   - `ORQ_INGEST_MESSAGE ...`
+   - `VERA_REPLY ... variant=project ...`
+
+Nota:
+- Si `whatsapp_demo_phone` no está disponible en `bootstrap`, se muestra alerta y el botón queda deshabilitado.

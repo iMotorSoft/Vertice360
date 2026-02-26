@@ -24,9 +24,9 @@ const hasInitialCliente = initialCliente.length > 0;
     <OrquestadorAppLive client:load initialCliente={initialCliente} />
   </div>
 
-  <script is:inline>
+  <script is:inline define:vars={{ initialCliente }}>
     (() => {
-      const initialCliente = {JSON.stringify(initialCliente)};
+      const initialClienteFromServer = String(initialCliente || "").trim();
 
       const readCliente = () => {
         const raw = new URLSearchParams(window.location.search).get("cliente");
@@ -55,7 +55,7 @@ const hasInitialCliente = initialCliente.length > 0;
         );
       };
 
-      applyMode(initialCliente);
+      applyMode(readCliente() || initialClienteFromServer);
       window.addEventListener("popstate", () => applyMode(readCliente()));
     })();
   </script>

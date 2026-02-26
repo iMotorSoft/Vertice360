@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from litestar import Router, get, post
+from litestar import Request, Router, get, post
 from litestar.exceptions import HTTPException
 
+from backend import globalVar
 from backend.modules.vertice360_orquestador_demo import services
 from backend.modules.vertice360_orquestador_demo.schemas import (
+    AdminResetPhoneRequest,
     IngestMessageRequest,
     SupervisorSendRequest,
     VisitConfirmRequest,
@@ -24,6 +26,21 @@ def _map_service_error(exc: Exception) -> HTTPException:
     if isinstance(exc, RuntimeError):
         return HTTPException(status_code=503, detail=str(exc))
     return HTTPException(status_code=500, detail=str(exc))
+
+
+def _validate_admin_reset_access(request: Request) -> None:
+    if str(globalVar.RUN_ENV).lower() != "dev":
+        raise HTTPException(
+            status_code=403,
+            detail="admin reset is only available in dev",
+        )
+
+    expected = str(globalVar.V360_ADMIN_TOKEN or "").strip()
+    provided = str(request.headers.get("x-v360-admin-token") or "").strip()
+    if not expected:
+        raise HTTPException(status_code=401, detail="admin reset disabled")
+    if not provided or provided != expected:
+        raise HTTPException(status_code=401, detail="invalid admin token")
 
 
 @get("/bootstrap")
@@ -59,6 +76,17 @@ async def ingest_message(data: IngestMessageRequest) -> dict[str, Any]:
             project_code=data.project_code,
             source=data.source,
         )
+    except Exception as exc:  # noqa: BLE001
+        raise _map_service_error(exc) from exc
+
+
+@post("/admin/reset_phone", status_code=200)
+async def admin_reset_phone(request: Request, data: AdminResetPhoneRequest) -> dict[str, Any]:
+    try:
+        _validate_admin_reset_access(request)
+        return services.admin_reset_phone(phone=data.phone)
+    except HTTPException:
+        raise
     except Exception as exc:  # noqa: BLE001
         raise _map_service_error(exc) from exc
 
@@ -125,6 +153,7 @@ router = Router(
         dashboard,
         ticket_detail,
         ingest_message,
+        admin_reset_phone,
         visit_propose,
         visit_confirm,
         visit_reschedule,

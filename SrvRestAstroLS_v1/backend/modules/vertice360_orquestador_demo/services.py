@@ -2,20 +2,27 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
 from backend import globalVar
+from backend.modules.messaging.providers.gupshup.whatsapp.service import (
+    GupshupWhatsAppSendError,
+    send_text_message as gupshup_send_text,
+)
 from backend.modules.vertice360_orquestador_demo import db, repo
 from backend.telemetry.context import set_correlation_id
 
 logger = logging.getLogger(__name__)
 
 DOMAIN = "vertice360_orquestador_demo"
+STAGE_PENDING_VISIT = "Pendiente de visita"
 STAGE_WAITING_CONFIRMATION = "Esperando confirmación"
 STAGE_VISIT_CONFIRMED = "Visita confirmada"
+REQUIREMENTS_FIELDS = ("ambientes", "presupuesto", "moneda")
 
 ALLOWED_SOURCES = {"whatsapp", "instagram", "web", "meta_ads", "other"}
 
@@ -95,6 +102,182 @@ def _infer_project(conn: Any, project_code: str | None, text: str) -> dict[str, 
     return None
 
 
+def _normalize_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", str(value or ""))
+    without_accents = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    return " ".join(without_accents.lower().split())
+
+
+def parse_ambientes(text: str) -> int | None:
+    clean = _normalize_text(text)
+    if not clean:
+        return None
+
+    if re.search(r"\bmono(?:ambiente)?s?\b", clean):
+        return 1
+
+    digit_match = re.search(r"\b([1-4])\s*amb(?:\.|ientes?)?\b", clean)
+    if digit_match:
+        return int(digit_match.group(1))
+
+    word_map = {"un": 1, "uno": 1, "dos": 2, "tres": 3, "cuatro": 4}
+    word_match = re.search(r"\b(un|uno|dos|tres|cuatro)\s+amb(?:\.|ientes?)?\b", clean)
+    if word_match:
+        return word_map.get(word_match.group(1))
+    return None
+
+
+def _parse_compact_number(token: str) -> Decimal | None:
+    compact = str(token or "").strip().replace(" ", "")
+    if not compact:
+        return None
+
+    if "." in compact and "," in compact:
+        if compact.rfind(",") > compact.rfind("."):
+            normalized = compact.replace(".", "").replace(",", ".")
+        else:
+            normalized = compact.replace(",", "")
+    elif re.match(r"^\d{1,3}(?:[.,]\d{3})+$", compact):
+        normalized = compact.replace(".", "").replace(",", "")
+    else:
+        normalized = compact.replace(",", ".")
+
+    try:
+        return Decimal(normalized)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def parse_budget_currency(text: str) -> dict[str, Any]:
+    clean = _normalize_text(text)
+    if not clean:
+        return {"presupuesto": None, "moneda": None}
+
+    currency = None
+    if re.search(r"(?:\bu\s*\$\s*s?\b|\busd\b|\bdolares?\b|\bdolar(?:es)?\b)", clean):
+        currency = "USD"
+    elif re.search(r"(?:\bars\b|\bpeso(?:s)?\b|\bargentin(?:os|as)\b)", clean):
+        currency = "ARS"
+
+    amount_candidates: list[tuple[int, str]] = []
+    for match in re.finditer(
+        r"(?<!\w)(\d{1,3}(?:[.,]\d{3})+|\d+(?:[.,]\d+)?)(?:\s*(k|m|mil))?(?!\w)",
+        clean,
+    ):
+        value = _parse_compact_number(match.group(1))
+        if value is None:
+            continue
+        suffix = str(match.group(2) or "").lower()
+        multiplier = 1
+        if suffix in {"k", "mil"}:
+            multiplier = 1000
+        elif suffix == "m":
+            multiplier = 1_000_000
+        computed = int(value * multiplier)
+        amount_candidates.append((computed, suffix))
+
+    if not amount_candidates:
+        return {"presupuesto": None, "moneda": currency}
+
+    presupuesto, suffix = max(amount_candidates, key=lambda item: item[0])
+    if presupuesto < 1000 and not suffix and currency is None:
+        return {"presupuesto": None, "moneda": currency}
+    return {"presupuesto": presupuesto, "moneda": currency}
+
+
+def _extract_ticket_requirements(detail: dict[str, Any] | None) -> dict[str, Any]:
+    base_summary = detail.get("summary_jsonb") if isinstance(detail, dict) else {}
+    requirements = {}
+    if isinstance(base_summary, dict):
+        raw = base_summary.get("requirements")
+        if isinstance(raw, dict):
+            requirements = dict(raw)
+
+    if detail:
+        if detail.get("req_ambientes") is not None:
+            requirements["ambientes"] = int(detail.get("req_ambientes"))
+        if detail.get("req_presupuesto") is not None:
+            requirements["presupuesto"] = int(detail.get("req_presupuesto"))
+        if detail.get("req_moneda"):
+            requirements["moneda"] = str(detail.get("req_moneda")).upper()
+
+    normalized: dict[str, Any] = {}
+    if requirements.get("ambientes") is not None:
+        normalized["ambientes"] = int(requirements["ambientes"])
+    if requirements.get("presupuesto") is not None:
+        normalized["presupuesto"] = int(requirements["presupuesto"])
+    if requirements.get("moneda"):
+        normalized["moneda"] = str(requirements["moneda"]).upper()
+    return normalized
+
+
+def _missing_requirements(requirements: dict[str, Any]) -> list[str]:
+    missing: list[str] = []
+    for field in REQUIREMENTS_FIELDS:
+        value = requirements.get(field)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            missing.append(field)
+    return missing
+
+
+def _requirements_patch_from_text(text: str) -> dict[str, Any]:
+    patch: dict[str, Any] = {}
+    ambientes = parse_ambientes(text)
+    if ambientes is not None:
+        patch["ambientes"] = ambientes
+
+    budget_data = parse_budget_currency(text)
+    if budget_data.get("presupuesto") is not None:
+        patch["presupuesto"] = int(budget_data["presupuesto"])
+    if budget_data.get("moneda"):
+        patch["moneda"] = str(budget_data["moneda"]).upper()
+    return patch
+
+
+def _format_amount(amount: Any) -> str:
+    try:
+        value = int(amount)
+    except Exception:  # noqa: BLE001
+        return str(amount or "-")
+    return f"{value:,}".replace(",", ".")
+
+
+def _build_vera_project_requirements_reply(project_name: str, missing_fields: list[str]) -> str:
+    clean_project = str(project_name or "").strip() or "este proyecto"
+    missing = set(missing_fields or [])
+
+    if missing == {"ambientes"}:
+        ask = "Contame cuántos ambientes buscás."
+    elif missing == {"presupuesto"}:
+        ask = "Contame tu presupuesto aproximado."
+    elif missing == {"moneda"}:
+        ask = "Decime si tu presupuesto es en USD o ARS."
+    elif missing == {"presupuesto", "moneda"}:
+        ask = "Contame tu presupuesto aproximado y la moneda (USD o ARS)."
+    elif missing:
+        ask = "Contame cuántos ambientes buscás y tu presupuesto aproximado (USD o ARS)."
+    else:
+        ask = "Contame cuántos ambientes buscás y tu presupuesto aproximado (USD o ARS)."
+
+    return (
+        f"Hola 👋 Soy Vera. Gracias por tu consulta por {clean_project}.\n"
+        f"{ask}"
+    )
+
+
+def _build_vera_project_summary_reply(project_name: str, requirements: dict[str, Any]) -> str:
+    ambientes = int(requirements.get("ambientes") or 0)
+    presupuesto = _format_amount(requirements.get("presupuesto"))
+    moneda = str(requirements.get("moneda") or "").upper() or "-"
+    return (
+        "Perfecto 🙌. Entonces:\n"
+        f"• Proyecto: {project_name}\n"
+        f"• Unidad: {ambientes} ambientes\n"
+        f"• Presupuesto: {presupuesto} {moneda}\n"
+        "Ya lo dejé listo para coordinar visita. Un asesor te va a proponer horarios por este chat en breve."
+    )
+
+
 def _jsonable(value: Any) -> Any:
     if value is None:
         return None
@@ -117,6 +300,99 @@ def _event_payload(base: dict[str, Any], **extra: Any) -> dict[str, Any]:
     payload = dict(base)
     payload.update(extra)
     return payload
+
+
+def build_board_url(phone_e164: str) -> str:
+    base = str(globalVar.V360_DEMO_BOARD_BASE_URL or "").strip()
+    if not base:
+        base = "http://localhost:3062/demo/vertice360-orquestador/"
+    digits = "".join(ch for ch in str(phone_e164 or "") if ch.isdigit())
+    if "?" in base:
+        separator = "&" if not base.endswith(("?", "&")) else ""
+    else:
+        separator = "?" if not base.endswith("?") else ""
+    return f"{base}{separator}cliente={digits}"
+
+
+def build_orquestador_board_url(phone_e164: str) -> str:
+    # Backward-compatible alias used by existing tests/docs.
+    return build_board_url(phone_e164)
+
+
+def _safe_board_url_for_log(board_url: str) -> str:
+    if str(globalVar.RUN_ENV).lower() == "dev":
+        return board_url
+    if not board_url:
+        return "-"
+    return board_url.split("?")[0] + "?cliente=***"
+
+
+def _build_vera_onboarding_reply(board_url: str) -> str:
+    return (
+        "Hola 👋 Soy Vera. Gracias por querer probar nuestra solución.\n"
+        "Te dejo el tablero para ver en vivo todo el flujo de mensajes y acciones:\n"
+        f"{board_url}\n\n"
+        "Tenés dos opciones para seguir:\n\n"
+        "1) Desde el tablero: elegí un proyecto y tocá \"Enviar WhatsApp\" para simular una consulta "
+        "que llega desde una publicidad.\n"
+        "2) Desde este chat: empezá a conversar y te voy a preguntar qué proyecto querés "
+        "(Bulnes 966, GDR 3760 o Manzanares 3277) para avanzar.\n\n"
+        "Te acompaño en la forma que prefieras 🙂.\n"
+        "Si querés, empezá por el tablero… o simplemente escribime por acá y seguimos."
+    )
+
+
+def _build_vera_project_reply(project_name: str) -> str:
+    return (
+        f"Hola 👋 Soy Vera. Gracias por tu consulta por {project_name}.\n"
+        "Decime ambientes (mono/2/3) y un presupuesto aproximado, y avanzamos con opciones y visita."
+    )
+
+
+def _build_vera_project_fallback() -> str:
+    return "¿Sobre qué proyecto querés consultar: Bulnes 966, GDR 3760 o Manzanares 3277?"
+
+
+async def _send_vera_whatsapp_reply(phone_e164: str, text: str) -> dict[str, Any]:
+    if not globalVar.gupshup_whatsapp_enabled():
+        return {
+            "provider": "gupshup_whatsapp",
+            "vera_send_ok": False,
+            "error": {
+                "type": "GupshupConfigError",
+                "message": "Gupshup WhatsApp is not configured",
+            },
+        }
+
+    try:
+        ack = await gupshup_send_text(phone_e164, text)
+        return {
+            "provider": "gupshup_whatsapp",
+            "vera_send_ok": True,
+            "provider_message_id": str(ack.provider_message_id or ""),
+            "raw": ack.raw,
+        }
+    except GupshupWhatsAppSendError as exc:
+        return {
+            "provider": "gupshup_whatsapp",
+            "vera_send_ok": False,
+            "error": {
+                "type": exc.__class__.__name__,
+                "message": str(exc),
+                "upstream_status": exc.upstream_status,
+                "upstream_body": exc.upstream_body,
+                "url": exc.url,
+            },
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "provider": "gupshup_whatsapp",
+            "vera_send_ok": False,
+            "error": {
+                "type": exc.__class__.__name__,
+                "message": str(exc),
+            },
+        }
 
 
 def bootstrap() -> dict[str, Any]:
@@ -148,6 +424,11 @@ def dashboard(cliente: str | None = None) -> dict[str, Any]:
                     "project_id": row.get("project_id"),
                     "project_code": row.get("project_code"),
                     "project_name": row.get("project_name"),
+                    "requirements": {
+                        "ambientes": row.get("req_ambientes"),
+                        "presupuesto": row.get("req_presupuesto"),
+                        "moneda": row.get("req_moneda"),
+                    },
                     "lead_id": row.get("lead_id"),
                     "lead_name": row.get("lead_name"),
                     "phone_e164": row.get("phone_e164"),
@@ -173,12 +454,33 @@ def dashboard(cliente: str | None = None) -> dict[str, Any]:
     return _jsonable(db.run_in_transaction(_tx))
 
 
+def admin_reset_phone(*, phone: str) -> dict[str, Any]:
+    normalized_phone = _normalize_phone_e164(phone)
+
+    def _tx(conn: Any) -> dict[str, Any]:
+        return {
+            "ok": True,
+            "phone": normalized_phone,
+            "deleted": repo.reset_by_phone(conn, normalized_phone),
+        }
+
+    result = db.run_in_transaction(_tx)
+    logger.warning(
+        "ORQ_ADMIN_RESET_PHONE phone=%s deleted=%s",
+        normalized_phone,
+        result.get("deleted"),
+    )
+    return _jsonable(result)
+
+
 def ingest_message(
     *,
     phone: str,
     text: str,
     project_code: str | None = None,
     source: str | None = None,
+    provider_message_id: str | None = None,
+    provider_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized_phone = _normalize_phone_e164(phone)
     clean_text = str(text or "").strip()
@@ -231,6 +533,12 @@ def ingest_message(
         ticket_id = str(ticket["id"])
         repo.touch_conversation_activity(conn, conversation_id)
 
+        inbound_provider_meta = {"source": source_value}
+        if isinstance(provider_meta, dict):
+            inbound_provider_meta.update(
+                {str(k): v for k, v in provider_meta.items() if v is not None}
+            )
+
         message = repo.insert_message(
             conn,
             conversation_id=conversation_id,
@@ -238,7 +546,8 @@ def ingest_message(
             direction="in",
             actor="client",
             text=clean_text,
-            provider_meta={"source": source_value},
+            provider_message_id=str(provider_message_id or "").strip() or None,
+            provider_meta=inbound_provider_meta,
         )
 
         if ticket_created:
@@ -279,13 +588,74 @@ def ingest_message(
         )
 
         detail = repo.get_ticket_detail(conn, ticket_id)
+        requirements_patch: dict[str, Any] = {}
+        requirements: dict[str, Any] = {}
+        requirements_missing: list[str] = []
+
+        if detail and detail.get("project_code"):
+            requirements = _extract_ticket_requirements(detail)
+            requirements_patch = _requirements_patch_from_text(clean_text)
+
+            if requirements_patch:
+                repo.update_ticket_requirements(conn, ticket_id, requirements_patch)
+                detail = repo.get_ticket_detail(conn, ticket_id) or detail
+                requirements = _extract_ticket_requirements(detail)
+                repo.insert_event(
+                    conn,
+                    correlation_id=ticket_id,
+                    domain=DOMAIN,
+                    name="orq.requirements.captured",
+                    actor="system",
+                    payload={
+                        "ticket_id": ticket_id,
+                        "project_code": detail.get("project_code"),
+                        "captured": requirements_patch,
+                        "requirements": requirements,
+                    },
+                )
+
+            requirements_missing = _missing_requirements(requirements)
+            requirements_complete = len(requirements_missing) == 0
+            current_stage = str(detail.get("stage") or ticket.get("stage") or "")
+            if (
+                requirements_complete
+                and current_stage
+                not in {STAGE_PENDING_VISIT, STAGE_WAITING_CONFIRMATION, STAGE_VISIT_CONFIRMED}
+            ):
+                previous_stage = current_stage
+                repo.update_ticket_activity(conn, ticket_id, stage=STAGE_PENDING_VISIT)
+                repo.insert_event(
+                    conn,
+                    correlation_id=ticket_id,
+                    domain=DOMAIN,
+                    name="orq.stage.updated",
+                    actor="system",
+                    payload={
+                        "ticket_id": ticket_id,
+                        "from_stage": previous_stage,
+                        "to_stage": STAGE_PENDING_VISIT,
+                        "reason": "requirements_complete",
+                    },
+                )
+                detail = repo.get_ticket_detail(conn, ticket_id) or detail
+        else:
+            requirements_complete = False
+
+        requirements = _extract_ticket_requirements(detail)
+        requirements_missing = _missing_requirements(requirements)
+        requirements_complete = bool(requirements and not requirements_missing)
         return {
             "ticket_id": ticket_id,
             "conversation_id": conversation_id,
             "lead_id": lead_id,
             "project_id": detail.get("project_id") if detail else ticket.get("project_id"),
             "project_code": detail.get("project_code") if detail else None,
+            "project_name": detail.get("project_name") if detail else None,
             "stage": detail.get("stage") if detail else ticket.get("stage"),
+            "requirements": requirements,
+            "requirements_missing": requirements_missing,
+            "requirements_complete": requirements_complete,
+            "requirements_patch": requirements_patch,
             "message_id": message.get("id"),
             "normalized_phone": normalized_phone,
             "lead_created": lead_created,
@@ -297,14 +667,103 @@ def ingest_message(
     ticket_id = str(result.get("ticket_id"))
     set_correlation_id(ticket_id)
     logger.info(
-        "ORQ_INGEST_MESSAGE correlation_id=%s lead_created=%s conversation_created=%s ticket_created=%s phone=%s",
+        "ORQ_INGEST_MESSAGE correlation_id=%s lead_created=%s conversation_created=%s ticket_created=%s phone=%s project_code=%s stage=%s requirements_complete=%s",
         ticket_id,
         result.get("lead_created"),
         result.get("conversation_created"),
         result.get("ticket_created"),
         normalized_phone,
+        result.get("project_code") or "-",
+        result.get("stage") or "-",
+        bool(result.get("requirements_complete")),
     )
     return _jsonable(result)
+
+
+async def ingest_from_provider(
+    *,
+    user_phone: str,
+    text: str,
+    provider: str = "gupshup_whatsapp",
+    provider_message_id: str | None = None,
+    provider_meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_phone = _normalize_phone_e164(user_phone)
+    clean_text = str(text or "").strip()
+    if not clean_text:
+        raise ValueError("text is required")
+
+    provider_name = str(provider or "gupshup_whatsapp").strip().lower() or "gupshup_whatsapp"
+    safe_provider_message_id = str(provider_message_id or "").strip() or None
+
+    inbound_meta = dict(provider_meta or {})
+    inbound_meta.setdefault("provider", provider_name)
+    inbound_meta.setdefault("channel", "whatsapp")
+
+    ingest_result = ingest_message(
+        phone=normalized_phone,
+        text=clean_text,
+        source="whatsapp",
+        provider_message_id=safe_provider_message_id,
+        provider_meta=inbound_meta,
+    )
+
+    is_first_contact = bool(
+        ingest_result.get("lead_created")
+        or ingest_result.get("conversation_created")
+        or ingest_result.get("ticket_created")
+    )
+    project_name = str(
+        ingest_result.get("project_name") or ingest_result.get("project_code") or ""
+    ).strip()
+    requirements = ingest_result.get("requirements") if isinstance(ingest_result.get("requirements"), dict) else {}
+    requirements_missing = (
+        ingest_result.get("requirements_missing")
+        if isinstance(ingest_result.get("requirements_missing"), list)
+        else []
+    )
+    requirements_complete = bool(ingest_result.get("requirements_complete"))
+    board_url = ""
+
+    if is_first_contact:
+        variant = "onboarding"
+        board_url = build_board_url(normalized_phone)
+        reply_text = _build_vera_onboarding_reply(board_url)
+    elif project_name:
+        variant = "project"
+        if requirements_complete:
+            reply_text = _build_vera_project_summary_reply(project_name, requirements)
+        else:
+            reply_text = _build_vera_project_requirements_reply(project_name, requirements_missing)
+    else:
+        variant = "choose_project"
+        reply_text = _build_vera_project_fallback()
+
+    send_result = await _send_vera_whatsapp_reply(normalized_phone, reply_text)
+    vera_send_ok = bool(send_result.get("vera_send_ok"))
+    ticket_id = str(ingest_result.get("ticket_id") or "")
+
+    logger.info(
+        "VERA_REPLY correlation_id=%s phone=%s provider=%s variant=%s send_ok=%s board_url=%s",
+        ticket_id or "-",
+        normalized_phone,
+        provider_name,
+        variant,
+        vera_send_ok,
+        _safe_board_url_for_log(board_url),
+    )
+
+    payload = {
+        **ingest_result,
+        "ok": True,
+        "routed": "orquestador",
+        "vera_send_ok": vera_send_ok,
+        "vera_reply_variant": variant,
+        "vera_reply_text": reply_text,
+    }
+    if not vera_send_ok:
+        payload["error"] = send_result.get("error")
+    return _jsonable(payload)
 
 
 def propose_visit(
