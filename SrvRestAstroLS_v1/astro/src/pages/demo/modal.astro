@@ -6,7 +6,7 @@ import CodexDemoChatModal from "../../components/demo/codex/CodexDemoChatModal.s
 
 const branding = {
   displayName: "Vertice360 Demo",
-  logoUrl: "/logo-placeholder.svg",
+  logoUrl: "/logo_v360.png",
   primaryColor: "#0F766E",
   secondaryColor: "#FBBF24",
   accentColor: "#115E59",
@@ -15,24 +15,32 @@ const branding = {
 
 <!-- DEMO – Dashboard con chat en modal (NO PRODUCCIÓN) -->
 <BaseLayout brand={branding}>
-  <section class="space-y-2 mb-8">
-    <p class="text-sm uppercase tracking-wide text-emerald-700 font-semibold">Demo Vertice360</p>
-    <h1 class="text-3xl font-bold text-emerald-900">Inventario en pozo con copiloto conversacional</h1>
-    <p class="text-neutral-600">
-      Explorá proyectos, unidades e inversores con datos ficticios y abrí el chat en pantalla completa para consultas rápidas. Pensado para mostrar el flujo comercial de Vertice360 end-to-end.
-    </p>
-  </section>
+  <div class="bg-[var(--bg-card-secondary)] rounded-2xl p-6 space-y-4">
+    <section class="space-y-2 mb-8">
+      <p class="text-sm uppercase tracking-wide text-emerald-700 font-semibold">
+        Demo Vertice360
+      </p>
+      <h1 class="text-3xl font-bold text-emerald-900">
+        Inventario en pozo con copiloto conversacional
+      </h1>
+      <p class="text-neutral-600">
+        Explorá proyectos, unidades e inversores con datos ficticios y abrí el
+        chat en pantalla completa para consultas rápidas. Pensado para mostrar
+        el flujo comercial de Vertice360 end-to-end.
+      </p>
+    </section>
 
-  <div class="mb-6">
-    <CodexDemoChatModal client:load />
+    <div class="mb-6">
+      <CodexDemoChatModal client:load />
+    </div>
+
+    <section class="grid gap-8 lg:grid-cols-3">
+      <div class="lg:col-span-2 space-y-8">
+        <CodexDemoDashboard client:load />
+      </div>
+      <div>
+        <CodexDemoLeadsFlow client:load />
+      </div>
+    </section>
   </div>
-
-  <section class="grid gap-8 lg:grid-cols-3">
-    <div class="lg:col-span-2 space-y-8">
-      <CodexDemoDashboard client:load />
-    </div>
-    <div>
-      <CodexDemoLeadsFlow client:load />
-    </div>
-  </section>
 </BaseLayout>

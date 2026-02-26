@@ -146,31 +146,31 @@
   });
 </script>
 
-<div class="card bg-gradient-to-br from-emerald-900 via-emerald-800 to-emerald-700 text-emerald-50 shadow-lg">
+<div class="card-primary mt-5 max-w-md">
   <div class="card-body space-y-4">
     <div class="flex items-start justify-between gap-3">
       <div>
-        <p class="text-xs uppercase tracking-wide text-emerald-200">Lead-to-Reserva (mock)</p>
-        <h3 class="card-title text-2xl text-white">Simulador comercial</h3>
-        <p class="text-sm text-emerald-100">
+        <p class="text-xs uppercase tracking-wide text-emerald-700 font-semibold">Lead-to-Reserva (mock)</p>
+        <h3 class="card-title text-2xl">Simulador comercial</h3>
+        <p class="text-sm">
           Arma un caso ficticio combinando inversor, proyecto y unidad para ver cómo fluye una reserva.
         </p>
       </div>
     </div>
 
     {#if error}
-      <div class="alert alert-error bg-opacity-20 border-0 text-sm">
+      <div class="text-error text-sm">
         <span>Error cargando datos: {error}</span>
       </div>
     {/if}
 
     <div class="space-y-3">
-      <label class="form-control w-full">
+      <label class="form-control flex flex-col">
         <div class="label">
-          <span class="label-text text-emerald-50">Inversor</span>
+          <span class="label-text">Inversor</span>
         </div>
         <select
-          class="select select-bordered select-sm bg-emerald-800 border-emerald-600 text-emerald-50"
+          class="select"
           bind:value={selectedInvestorId}
           on:change={(ev) => handleInvestorChange((ev.target as HTMLSelectElement).value)}
         >
@@ -183,15 +183,15 @@
         </select>
       </label>
 
-      <label class="form-control w-full">
+      <label class="form-control flex flex-col">
         <div class="label">
-          <span class="label-text text-emerald-50">Proyecto en pozo</span>
+          <span class="label-text">Proyecto en pozo</span>
           {#if loadingProjects}
             <span class="loading loading-dots loading-xs"></span>
           {/if}
         </div>
         <select
-          class="select select-bordered select-sm bg-emerald-800 border-emerald-600 text-emerald-50"
+          class="select"
           bind:value={selectedProjectId}
           on:change={(ev) => handleProjectChange((ev.target as HTMLSelectElement).value)}
         >
@@ -202,15 +202,15 @@
         </select>
       </label>
 
-      <label class="form-control w-full">
+      <label class="form-control flex flex-col">
         <div class="label">
-          <span class="label-text text-emerald-50">Unidad</span>
+          <span class="label-text">Unidad</span>
           {#if loadingUnits}
             <span class="loading loading-dots loading-xs"></span>
           {/if}
         </div>
         <select
-          class="select select-bordered select-sm bg-emerald-800 border-emerald-600 text-emerald-50"
+          class="select"
           bind:value={selectedUnitId}
           on:change={(ev) => handleUnitChange((ev.target as HTMLSelectElement).value)}
           disabled={!selectedProjectId}
@@ -226,33 +226,33 @@
           {/each}
         </select>
         {#if selectedUnitId === "" && selectedProjectId}
-          <span class="text-xs text-emerald-200 mt-1">Filtramos por proyecto para mostrar solo sus unidades disponibles.</span>
+          <span class="text-xs mt-1">Filtramos por proyecto para mostrar solo sus unidades disponibles.</span>
         {/if}
       </label>
 
       <div class="grid grid-cols-2 gap-3">
         <label class="form-control">
           <div class="label">
-            <span class="label-text text-emerald-50">% de reserva</span>
+            <span class="label-text">% de reserva</span>
           </div>
           <input
             type="range"
             min="5"
             max="30"
             step="1"
-            class="range range-sm range-success"
+            class="range range-sm"
             bind:value={reservaPorcentaje}
             on:input={refreshPreview}
           />
-          <div class="text-xs text-emerald-100 mt-1">{reservaPorcentaje}% del precio lista</div>
+          <div class="text-xs mt-1">{reservaPorcentaje}% del precio lista</div>
         </label>
 
         <label class="form-control">
           <div class="label">
-            <span class="label-text text-emerald-50">Contacto</span>
+            <span class="label-text">Contacto</span>
           </div>
           <select
-            class="select select-bordered select-sm bg-emerald-800 border-emerald-600 text-emerald-50"
+            class="select"
             bind:value={contacto}
             on:change={refreshPreview}
           >
@@ -263,12 +263,12 @@
         </label>
       </div>
 
-      <label class="form-control">
+      <label class="form-control flex flex-col">
         <div class="label">
-          <span class="label-text text-emerald-50">Nota interna</span>
+          <span class="label-text">Nota interna</span>
         </div>
         <textarea
-          class="textarea textarea-bordered bg-emerald-800 border-emerald-600 text-emerald-50"
+          class="textarea"
           rows="2"
           bind:value={nota}
           on:input={refreshPreview}
@@ -276,14 +276,14 @@
       </label>
     </div>
 
-    <div class="rounded-lg bg-emerald-950/40 border border-emerald-700 p-4 space-y-3">
-      <p class="text-sm uppercase tracking-wide text-emerald-200 font-semibold">Resumen mock</p>
+    <div class="card-accent p-4 space-y-3">
+      <p class="text-sm uppercase tracking-wide font-semibold">Resumen mock</p>
       {#if !preview.project || !preview.unit || !preview.investor}
-        <p class="text-emerald-100 text-sm">
+        <p class="text-sm">
           Seleccioná inversor, proyecto y unidad para armar una propuesta de reserva ficticia.
         </p>
       {:else}
-        <div class="space-y-2 text-emerald-50 text-sm">
+        <div class="space-y-2 text-sm">
           <p>
             <span class="font-semibold">Inversor:</span> {preview.investor.nombre} ({preview.investor.tipo_inversor})
           </p>
@@ -301,7 +301,7 @@
           <p>
             <span class="font-semibold">Canal:</span> {preview.contacto}
           </p>
-          <p class="text-emerald-100">
+          <p class="">
             <span class="font-semibold">Nota:</span> {preview.nota}
           </p>
         </div>
