@@ -93,30 +93,38 @@
   class={`modal ${open ? "modal-open" : ""}`}
   aria-label="Proponer visita"
 >
-  <div class="modal-box relative w-11/12 max-w-xl space-y-4 p-6">
-    <button
-      type="button"
-      class="btn btn-sm min-h-11 md:btn-xs md:min-h-[28px] hover:bg-gray-200 rounded-full p-2 absolute right-0 top-2"
-      aria-label="Cerrar modal de visita"
-      onclick={handleClose}
-      disabled={submitting}
-    >
-      ✕
-    </button>
-    <h1 class="">
-      {getModeConfig(mode).title}
-    </h1>
-    <p class="text-sm md:text-base text-slate-600 font-medium">
-      Cliente: <span class="font-medium">{cliente || "Sin cliente"}</span>
-    </p>
-    <p class="text-sm md:text-base text-slate-500">
-      {getModeConfig(mode).helperText}
-    </p>
+  <div
+    class="modal-box h-screen w-screen max-w-none rounded-none p-4 md:p-6 md:h-auto md:w-11/12 md:max-w-xl md:rounded-2xl relative space-y-4 overflow-y-auto"
+  >
+    <header class="flex items-center justify-between mb-2 md:mb-0">
+      <h1 class="text-xl font-bold md:text-2xl">
+        {getModeConfig(mode).title}
+      </h1>
+      <button
+        type="button"
+        class="btn btn-ghost btn-circle btn-sm md:btn-xs absolute right-1 md:right-3 top-1 md:top-3"
+        aria-label="Cerrar modal de visita"
+        onclick={handleClose}
+        disabled={submitting}
+      >
+        ✕
+      </button>
+    </header>
+
+    <div class="flex flex-col gap-1">
+      <p class="text-sm md:text-base text-slate-600 font-medium">
+        Cliente: <span class="font-medium">{cliente || "Sin cliente"}</span>
+      </p>
+      <p class="text-sm md:text-base text-slate-500">
+        {getModeConfig(mode).helperText}
+      </p>
+    </div>
 
     <ul class="mt-6 space-y-4">
       <li class="flex flex-col gap-1">
         <!-- svelte-ignore a11y_label_has_associated_control -->
         <label class="flex items-center gap-2 px-1">
+          <!-- icono user -->
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="16"
@@ -148,8 +156,7 @@
         />
       </li>
 
-      <li class="flex flex-col gap-1">
-        <!-- svelte-ignore a11y_label_has_associated_control -->
+      <li class="flex flex-col gap-2">
         <label class="flex items-center gap-2 px-1">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -176,96 +183,47 @@
           >
           <span
             class="text-xs font-semibold uppercase tracking-wider text-slate-500"
-            >Opción 1</span
+            >Opciones de Día y Horario</span
           >
         </label>
-        <input
-          class="input input-bordered w-full bg-slate-50 focus:bg-white transition-colors"
-          type="text"
-          placeholder="Día y hora sugerida"
-          bind:value={opcion1}
-          disabled={submitting}
-        />
-      </li>
-
-      <li class="flex flex-col gap-1">
-        <!-- svelte-ignore a11y_label_has_associated_control -->
-        <label class="flex items-center gap-2 px-1">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="text-slate-400"
-            ><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line
-              x1="16"
-              y1="2"
-              x2="16"
-              y2="6"
-            /><line x1="8" y1="2" x2="8" y2="6" /><line
-              x1="3"
-              y1="10"
-              x2="21"
-              y2="10"
-            /></svg
-          >
-          <span
-            class="text-xs font-semibold uppercase tracking-wider text-slate-500"
-            >Opción 2</span
-          >
-        </label>
-        <input
-          class="input input-bordered w-full bg-slate-50 focus:bg-white transition-colors"
-          type="text"
-          placeholder="Otra alternativa"
-          bind:value={opcion2}
-          disabled={submitting}
-        />
-      </li>
-
-      <li class="flex flex-col gap-1">
-        <!-- svelte-ignore a11y_label_has_associated_control -->
-        <label class="flex items-center gap-2 px-1">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="text-slate-400"
-            ><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line
-              x1="16"
-              y1="2"
-              x2="16"
-              y2="6"
-            /><line x1="8" y1="2" x2="8" y2="6" /><line
-              x1="3"
-              y1="10"
-              x2="21"
-              y2="10"
-            /></svg
-          >
-          <span
-            class="text-xs font-semibold uppercase tracking-wider text-slate-500"
-            >Opción 3 (opcional)</span
-          >
-        </label>
-        <input
-          class="input input-bordered w-full bg-slate-50 focus:bg-white transition-colors"
-          type="text"
-          placeholder="Opcional"
-          bind:value={opcion3}
-          disabled={submitting}
-        />
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 px-0.5">
+          <div class="flex flex-col gap-1">
+            <span class="text-[10px] text-slate-400 font-medium px-1"
+              >Opción 1</span
+            >
+            <input
+              class="input input-bordered w-full bg-slate-50 focus:bg-white transition-colors text-sm h-11"
+              type="text"
+              placeholder="Día y hora sugerida"
+              bind:value={opcion1}
+              disabled={submitting}
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-[10px] text-slate-400 font-medium px-1"
+              >Opción 2</span
+            >
+            <input
+              class="input input-bordered w-full bg-slate-50 focus:bg-white transition-colors text-sm h-11"
+              type="text"
+              placeholder="Otra alternativa"
+              bind:value={opcion2}
+              disabled={submitting}
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-[10px] text-slate-400 font-medium px-1"
+              >Opción 3</span
+            >
+            <input
+              class="input input-bordered w-full bg-slate-50 focus:bg-white transition-colors text-sm h-11"
+              type="text"
+              placeholder="Opcional"
+              bind:value={opcion3}
+              disabled={submitting}
+            />
+          </div>
+        </div>
       </li>
 
       <li class="flex flex-col gap-1">
@@ -303,13 +261,13 @@
     <div class="modal-action justify-between">
       <button
         type="button"
-        class="btn btn-secondary min-h-11"
+        class="btn btn-secondary"
         onclick={handleClose}
         disabled={submitting}>Cancelar</button
       >
       <button
         type="button"
-        class="btn btn-primary min-h-11"
+        class="btn btn-primary"
         onclick={handleSend}
         disabled={submitting}
         >{submitting ? "Enviando..." : getModeConfig(mode).submitLabel}</button

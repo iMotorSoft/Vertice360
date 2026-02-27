@@ -44,41 +44,67 @@ h1 {
   }
 }
 
-.btn-primary {
-  background: linear-gradient(to bottom right, #065f46, #066e4e, #047857);
-  color: #F7F7F7;
-  border-radius: 50px;
-  padding: 20px 20px;
-  box-shadow: none;
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  font-weight: 600;
-  gap: 10px;
-}
+@layer components {
+  /* Botón Principal (Marca) */
+  .btn-primary {
+    background: linear-gradient(to bottom right, #065f46, #066e4e, #047857);
+    color: #f7f7f7;
+    border-radius: 9999px;
+    border: none;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    box-shadow: none;
+    transition: all 0.2s ease;
 
-.btn-primary:hover {
-  background:linear-gradient(to top left, #055a42, #066e4e, #098b66);
-  color: #F7F7F7;
-}
+    /* MOBILE (default) */
+    padding: 10px 10px;
+    font-size: 0.875rem; /* 14px */
+  }
 
-.btn-secondary {
-  background: transparent; 
-  color: var(--text-secondary); 
-  border: 2px solid var(--text-secondary);
-  border-radius: 50px;
-  padding: 20px 20px;
-  box-shadow: none;
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  font-weight: 600;
-  gap: 10px;
-}
+  .btn-primary:hover {
+    background: linear-gradient(to top left, #055a42, #066e4e, #098b66);
+    color: #f7f7f7;
+  }
 
-.btn-secondary:hover {
-  background: var(--bg-main);
-  border: 2px solid var(--bg-main);
+  /* Botón Secundario (Outline) */
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 2px solid var(--text-secondary);
+    border-radius: 9999px;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    box-shadow: none;
+    transition: all 0.2s ease;
+
+    /* MOBILE (default) */
+    padding: 10px 10px; /* Un poco menos de padding vertical por el border 2px */
+    font-size: 0.875rem;
+  }
+
+  .btn-secondary:hover {
+    background: var(--bg-main);
+    border-color: var(--brand-secondary);
+    color: var(--brand-primary);
+  }
+
+  /* Media Queries para Desktop */
+  @screen md {
+    .btn-primary {
+      padding: 20px 20px;
+      font-size: 1rem;
+    }
+    .btn-secondary {
+      padding: 20px 20px;
+      font-size: 1rem;
+    }
+  }
 }
 .btn-ghost {
   background: transparent !important; 

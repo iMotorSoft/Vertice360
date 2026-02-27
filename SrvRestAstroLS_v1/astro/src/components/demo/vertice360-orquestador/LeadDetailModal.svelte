@@ -265,30 +265,30 @@
 >
   <div
     class="modal-box h-screen w-screen max-w-none rounded-none p-0 md:h-[92vh] md:w-full
-    md:max-w-2xl md:rounded-2xl flex flex-col overflow-hidden space-y-4 px-2 py-1"
+    md:max-w-2xl md:rounded-2xl flex flex-col overflow-hidden"
   >
     <header
       class="sticky top-0 z-20 border-b border-base-300 bg-base-100 px-4 py-3 md:px-5"
     >
       <button
         type="button"
-        class="btn btn-sm min-h-11 md:btn-xs md:min-h-[28px] hover:bg-gray-200 rounded-full p-2 absolute right-3 top-3"
+        class="btn btn-sm min-h-11 md:btn-xs md:min-h-[28px] hover:bg-gray-200 rounded-full p-2 absolute right-3 top-1 md:top-3"
         aria-label="Cerrar detalle"
         onclick={handleClose}
       >
         ✕
       </button>
       <h1 class="">Detalle de lead</h1>
-      <p class="mt-1 text-base text-slate-700 break-words">
+      <p class="mt-1 text-sm md:text-base text-slate-700 break-words">
         {lead?.proyecto || "--"} • {lead?.cliente || "--"}
       </p>
       <div class="mt-2 flex flex-wrap items-center gap-2 pr-8">
         <span
-          class="bg-violet-100 text-violet-700 border-violet-200 px-2 rounded-full"
+          class="text-sm md:text-base bg-violet-100 text-violet-700 border-violet-200 px-2 rounded-full"
           >{lead?.estado || "--"}</span
         >
         <span
-          class="bg-amber-100 text-amber-700 border-amber-200 px-2 rounded-full"
+          class="text-sm md:text-base bg-amber-100 text-amber-700 border-amber-200 px-2 rounded-full"
           >Supervisor (Demo)</span
         >
         <span class="text-xs text-slate-600">
@@ -374,44 +374,63 @@
       {/if}
     </div>
 
-    <footer class="border-t border-base-300 bg-base-100 px-4 py-3 md:px-5">
-      <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Composer Supervisor
-      </p>
-      <div class="mt-2 grid gap-2 md:grid-cols-[1fr_auto] md:items-end">
-        <div class="space-y-2">
-          <label class="form-control">
-            <span class="label-text text-xs">Enviar a</span>
-            <select
-              class="select select-bordered min-h-11 w-full"
-              bind:value={recipientTarget}
-              disabled={supervisorSending}
-            >
-              {#each recipientOptions(lead) as option}
-                <option value={option.key}>
-                  {option.label} - {option.phone}
-                </option>
-              {/each}
-            </select>
-          </label>
-          <label class="form-control">
-            <span class="label-text text-xs">Mensaje del supervisor</span>
-            <textarea
-              class="textarea w-full textarea-bordered min-h-18"
-              bind:value={draftMessage}
-              placeholder="Escribí una intervención con trazabilidad..."
-              disabled={supervisorSending}
-            ></textarea>
-          </label>
+    <footer
+      class="border-t border-slate-100 bg-white px-3 py-2 md:px-5 md:py-3 animate-in fade-in slide-in-from-bottom-2 duration-300"
+    >
+      <div class="flex flex-col gap-2">
+        <div class="flex items-center justify-between px-1">
+          <p
+            class="text-[10px] font-bold uppercase tracking-widest text-slate-400"
+          >
+            Composer Supervisor
+          </p>
+          <select
+            class="select select-ghost select-xs text-[10px] h-6 min-h-6"
+            bind:value={recipientTarget}
+            disabled={supervisorSending}
+          >
+            {#each recipientOptions(lead) as option}
+              <option value={option.key}>
+                A: {option.name}
+              </option>
+            {/each}
+          </select>
         </div>
-        <button
-          type="button"
-          class="btn btn-primary min-h-11"
-          onclick={appendSupervisorMessage}
-          disabled={supervisorSending}
-        >
-          {supervisorSending ? "Enviando..." : "Enviar intervención"}
-        </button>
+
+        <div class="relative flex items-end gap-2 px-0.5">
+          <textarea
+            class="textarea textarea-bordered w-full min-h-[44px] max-h-32 py-2.5 px-4 rounded-[22px] bg-slate-50 border-none focus:ring-1 focus:ring-emerald-500 resize-none text-sm"
+            bind:value={draftMessage}
+            placeholder="Mensaje..."
+            disabled={supervisorSending}
+          ></textarea>
+          <button
+            type="button"
+            class="btn btn-circle bg-emerald-700 text-white shadow-sm hover:scale-105 active:scale-95 transition-transform shrink-0"
+            onclick={appendSupervisorMessage}
+            disabled={supervisorSending || !draftMessage.trim()}
+            aria-label="Enviar"
+          >
+            {#if supervisorSending}
+              <span class="loading loading-spinner loading-xs"></span>
+            {:else}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                ><line x1="22" y1="2" x2="11" y2="13" /><polyline
+                  points="22 2 15 22 11 13 2 9 22 2"
+                /></svg
+              >
+            {/if}
+          </button>
+        </div>
       </div>
     </footer>
   </div>
