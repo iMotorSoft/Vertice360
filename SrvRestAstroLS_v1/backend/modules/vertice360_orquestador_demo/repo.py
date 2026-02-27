@@ -105,6 +105,65 @@ def get_lead_by_phone(conn: Any, phone_e164: str) -> dict[str, Any] | None:
     )
 
 
+def reset_by_phone(conn: Any, phone_e164: str) -> dict[str, int]:
+    counts = {
+        "events": 0,
+        "visit_confirmations": 0,
+        "visit_proposals": 0,
+        "messages": 0,
+        "tickets": 0,
+        "conversations": 0,
+        "leads": 0,
+    }
+    clean_phone = str(phone_e164 or "").strip()
+    if not clean_phone:
+        return counts
+
+    lead = get_lead_by_phone(conn, clean_phone)
+    if lead is None:
+        return counts
+
+    lead_id = str(lead["id"])
+    ticket_rows = fetch_all(conn, "select id from tickets where lead_id = %s", (lead_id,))
+    ticket_ids = [str(row["id"]) for row in ticket_rows if row.get("id")]
+
+    if ticket_ids:
+        placeholders = ", ".join(["%s"] * len(ticket_ids))
+        params = tuple(ticket_ids)
+
+        cursor = conn.execute(
+            f"delete from events where correlation_id in ({placeholders})",
+            params,
+        )
+        counts["events"] = int(cursor.rowcount or 0)
+
+        cursor = conn.execute(
+            f"delete from visit_confirmations where ticket_id in ({placeholders})",
+            params,
+        )
+        counts["visit_confirmations"] = int(cursor.rowcount or 0)
+
+        cursor = conn.execute(
+            f"delete from visit_proposals where ticket_id in ({placeholders})",
+            params,
+        )
+        counts["visit_proposals"] = int(cursor.rowcount or 0)
+
+    cursor = conn.execute("delete from messages where lead_id = %s", (lead_id,))
+    counts["messages"] = int(cursor.rowcount or 0)
+
+    cursor = conn.execute("delete from tickets where lead_id = %s", (lead_id,))
+    counts["tickets"] = int(cursor.rowcount or 0)
+
+    cursor = conn.execute("delete from conversations where lead_id = %s", (lead_id,))
+    counts["conversations"] = int(cursor.rowcount or 0)
+
+    cursor = conn.execute("delete from leads where id = %s", (lead_id,))
+    counts["leads"] = int(cursor.rowcount or 0)
+
+    return counts
+
+
 def create_lead(conn: Any, phone_e164: str, source: str) -> dict[str, Any]:
     row = fetch_one(
         conn,
@@ -247,6 +306,7 @@ def create_ticket(
             last_activity_at,
             last_message_snippet,
             visit_scheduled_at,
+            summary_jsonb,
             created_at,
             updated_at
         """,
@@ -303,10 +363,50 @@ def update_ticket_activity(
             last_activity_at,
             last_message_snippet,
             visit_scheduled_at,
+            summary_jsonb,
             created_at,
             updated_at
         """,
         tuple(params),
+    )
+    if row is None:
+        raise KeyError("ticket not found")
+    return row
+
+
+def update_ticket_requirements(
+    conn: Any,
+    ticket_id: str,
+    requirements_patch: dict[str, Any],
+) -> dict[str, Any]:
+    row = fetch_one(
+        conn,
+        """
+        update tickets
+        set summary_jsonb = jsonb_set(
+                coalesce(summary_jsonb, '{}'::jsonb),
+                '{requirements}',
+                coalesce(summary_jsonb->'requirements', '{}'::jsonb) || %s::jsonb,
+                true
+            ),
+            last_activity_at = now(),
+            updated_at = now()
+        where id = %s
+        returning
+            id,
+            conversation_id,
+            lead_id,
+            project_id,
+            stage,
+            assigned_advisor_id,
+            last_activity_at,
+            last_message_snippet,
+            visit_scheduled_at,
+            summary_jsonb,
+            created_at,
+            updated_at
+        """,
+        (json.dumps(requirements_patch or {}, default=str), ticket_id),
     )
     if row is None:
         raise KeyError("ticket not found")
@@ -397,6 +497,7 @@ def get_ticket_context(conn: Any, ticket_id: str) -> dict[str, Any] | None:
             t.last_activity_at,
             t.last_message_snippet,
             t.visit_scheduled_at,
+            t.summary_jsonb,
             t.created_at,
             t.updated_at,
             l.phone_e164,
@@ -636,6 +737,7 @@ def get_dashboard_ticket_rows(conn: Any, cliente: str | None) -> list[dict[str, 
             t.last_activity_at,
             t.last_message_snippet,
             t.visit_scheduled_at,
+            t.summary_jsonb,
             t.created_at,
             t.updated_at,
             l.phone_e164,
@@ -643,6 +745,9 @@ def get_dashboard_ticket_rows(conn: Any, cliente: str | None) -> list[dict[str, 
             l.source as lead_source,
             p.code as project_code,
             p.name as project_name,
+            (t.summary_jsonb->'requirements'->>'ambientes')::int as req_ambientes,
+            (t.summary_jsonb->'requirements'->>'presupuesto')::bigint as req_presupuesto,
+            upper(nullif(t.summary_jsonb->'requirements'->>'moneda', '')) as req_moneda,
             coalesce(lm.text, t.last_message_snippet, '') as last_message_text,
             lm.direction as last_message_direction,
             lm.actor as last_message_actor,
@@ -715,13 +820,17 @@ def get_ticket_detail(conn: Any, ticket_id: str) -> dict[str, Any] | None:
             t.last_activity_at,
             t.last_message_snippet,
             t.visit_scheduled_at,
+            t.summary_jsonb,
             t.created_at,
             t.updated_at,
             l.phone_e164,
             l.name as lead_name,
             l.source as lead_source,
             p.code as project_code,
-            p.name as project_name
+            p.name as project_name,
+            (t.summary_jsonb->'requirements'->>'ambientes')::int as req_ambientes,
+            (t.summary_jsonb->'requirements'->>'presupuesto')::bigint as req_presupuesto,
+            upper(nullif(t.summary_jsonb->'requirements'->>'moneda', '')) as req_moneda
         from tickets t
         join leads l on l.id = t.lead_id
         left join projects p on p.id = t.project_id

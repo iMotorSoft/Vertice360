@@ -100,6 +100,11 @@ DB_PG_V360_URL: str = os.environ.get("DB_PG_V360_URL", "").strip()
 ALLOW_FALLBACK_V360_DB: bool = os.environ.get(
     "ALLOW_FALLBACK_V360_DB", "false"
 ).strip().lower() in ("1", "true", "yes", "on")
+V360_ADMIN_TOKEN: str = os.environ.get("V360_ADMIN_TOKEN", "").strip()
+V360_DEMO_BOARD_BASE_URL: str = os.environ.get(
+    "V360_DEMO_BOARD_BASE_URL",
+    "http://localhost:3062/demo/vertice360-orquestador/",
+).strip()
 
 # =========================
 # Security / Roles
@@ -426,11 +431,17 @@ def boot_log() -> None:
         f"db_v360_valid={v360_ok} db_v360_reason={v360_reason} "
         f"allow_fallback_v360={ALLOW_FALLBACK_V360_DB}"
     )
+    print(f"[{APP_NAME}] v360_admin_token_set={bool(V360_ADMIN_TOKEN)}")
+    if RUN_ENV == "dev" and not V360_ADMIN_TOKEN:
+        print(
+            f"[{APP_NAME}] WARNING: V360_ADMIN_TOKEN is empty in dev; admin reset disabled."
+        )
     print(
         f"[{APP_NAME}] storage_provider={STORAGE_PROVIDER} local_root={STORAGE_LOCAL_ROOT}"
     )
     print(f"[{APP_NAME}] data_root={DATA_ROOT}")
     print(f"[{APP_NAME}] rules_dir={RULES_DIR}")
+    print(f"[{APP_NAME}] inbound_router_mode=orquestador")
     print(f"[{APP_NAME}] ai_workflow_reply={VERTICE360_AI_WORKFLOW_REPLY}")
     print(f"[{APP_NAME}] mlflow={MLFLOW_TRACKING_URI}")
     print(f"[{APP_NAME}] openai_key={mask(OpenAI_Key)} model={OpenAI_Model}")

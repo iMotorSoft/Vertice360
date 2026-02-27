@@ -72,8 +72,8 @@ def test_gupshup_webhook_message_event_status_is_ignored(client, monkeypatch, ev
     assert calls == {"ai": 0, "workflow": 0}
 
 
-def test_gupshup_webhook_inbound_text_triggers_workflow_once(client, monkeypatch, event_recorder) -> None:  # noqa: ARG001
-    calls = {"ai": 0, "workflow": 0}
+def test_gupshup_webhook_inbound_text_routes_to_orquestador_once(client, monkeypatch, event_recorder) -> None:  # noqa: ARG001
+    calls = {"ai": 0, "workflow": 0, "orq": 0}
 
     async def fake_ai(*args, **kwargs):  # noqa: ANN002, ANN003
         calls["ai"] += 1
@@ -83,8 +83,18 @@ def test_gupshup_webhook_inbound_text_triggers_workflow_once(client, monkeypatch
         calls["workflow"] += 1
         return {"ticketId": "VTX-INBOUND-1"}
 
+    async def fake_orquestador_ingest(*args, **kwargs):  # noqa: ANN002, ANN003
+        calls["orq"] += 1
+        return {
+            "ok": True,
+            "routed": "orquestador",
+            "ticket_id": "ORQ-INBOUND-1",
+            "vera_send_ok": True,
+        }
+
     monkeypatch.setattr(messaging_routes, "maybe_start_ai_workflow_from_inbound", fake_ai)
     monkeypatch.setattr(messaging_routes, "process_inbound_message", fake_workflow)
+    monkeypatch.setattr(messaging_routes.orquestador_demo_services, "ingest_from_provider", fake_orquestador_ingest)
 
     payload = {
         "type": "message",
@@ -104,5 +114,5 @@ def test_gupshup_webhook_inbound_text_triggers_workflow_once(client, monkeypatch
     )
 
     assert response.status_code == 201
-    assert response.json().get("ok") is True
-    assert calls == {"ai": 0, "workflow": 1}
+    assert response.json() == {"ok": True, "routed": "orquestador", "vera_send_ok": True}
+    assert calls == {"ai": 0, "workflow": 0, "orq": 1}

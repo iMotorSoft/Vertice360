@@ -1,6 +1,6 @@
 <script>
   import { onMount } from "svelte";
-  import { URL_SVG_XMLNS, URL_WA_ME } from "../../global.js";
+  import { URL_SVG_XMLNS, URL_WA_API, URL_WA_ME } from "../../global.js";
 
   import LeadDetailModal from "./LeadDetailModal.svelte";
   import VisitProposalModal from "./VisitProposalModal.svelte";
@@ -29,12 +29,13 @@
   let cliente = $state(String(initialCliente || "").trim());
   let notice = $state("");
   let errorMessage = $state("");
+  let whatsappPhoneError = $state("");
 
   let isBootstrapping = $state(false);
   let isLoadingDashboard = $state(false);
   let isActionRunning = $state(false);
 
-  let demoWhatsAppPhone = $state("4526325250");
+  let demoWhatsAppPhone = $state("");
   let ads = $state([]);
   let kpis = $state([]);
   let conversations = $state([]);
@@ -61,6 +62,7 @@
   let activeProposalByTicket = $state({});
 
   let bootstrapLoaded = $state(false);
+  const WHATSAPP_PHONE_LOAD_ERROR = "No se pudo cargar el número de WhatsApp demo";
 
   const normalizeClienteDisplay = (value) => {
     const compact = String(value || "").replace(/[\s-]+/g, "");
@@ -71,6 +73,9 @@
   };
 
   const hasCliente = () => Boolean(normalizeClienteDisplay(cliente));
+
+  const normalizePhoneDigits = (value) => String(value || "").replace(/\D+/g, "");
+  const hasDemoWhatsAppPhone = () => Boolean(normalizePhoneDigits(demoWhatsAppPhone));
 
   const formatDateTime = (value) => {
     if (!value) return "--";
@@ -94,9 +99,50 @@
     return parsed.toISOString();
   };
 
-  const buildWhatsAppUrl = (projectCode) => {
-    const payload = String(projectCode || "").trim() || "VERTICE360";
-    return `${URL_WA_ME}/${demoWhatsAppPhone}/?text=${encodeURIComponent(payload)}`;
+  const extractProjectBarrio = (projectName, projectLocation) => {
+    const locationBarrio = String(projectLocation?.barrio || "").trim();
+    if (locationBarrio) return locationBarrio;
+
+    const name = String(projectName || "").trim();
+    if (!name) return "";
+
+    const byDash = name.split("—").map((part) => part.trim()).filter(Boolean);
+    if (byDash.length > 1) return byDash[1];
+
+    const byHyphen = name.split("-").map((part) => part.trim()).filter(Boolean);
+    if (byHyphen.length > 1) return byHyphen[1];
+
+    return "";
+  };
+
+  const buildAdPrefillText = (ad) => {
+    const projectCode = String(ad?.projectCode || "").trim();
+    if (!projectCode) return "Hola, vengo por un anuncio.";
+    const barrio = String(ad?.barrio || "").trim();
+    if (barrio) {
+      return `Hola, vengo por un anuncio. Me interesa ${projectCode} (${barrio}).`;
+    }
+    return `Hola, vengo por un anuncio. Me interesa ${projectCode}.`;
+  };
+
+  const isLikelyMobileBrowser = () => {
+    if (typeof navigator === "undefined") return true;
+    return /Android|iPhone|iPad|iPod|IEMobile|Opera Mini|Mobile/i.test(String(navigator.userAgent || ""));
+  };
+
+  const buildWhatsAppUrl = (toPhoneE164OrDigits, text) => {
+    const digits = normalizePhoneDigits(toPhoneE164OrDigits);
+    if (!digits) return "";
+    const encodedText = encodeURIComponent(String(text || "").trim());
+    if (isLikelyMobileBrowser()) {
+      return `${URL_WA_ME}/${digits}?text=${encodedText}`;
+    }
+    return `${URL_WA_API}?phone=${digits}&text=${encodedText}`;
+  };
+
+  const getAdWhatsAppUrl = (ad) => {
+    if (!hasDemoWhatsAppPhone()) return "";
+    return buildWhatsAppUrl(demoWhatsAppPhone, buildAdPrefillText(ad));
   };
 
   const estadoLabel = (estado) => {
@@ -169,11 +215,13 @@
         chips: project.tags || [],
         projectCode: project.code || "",
         whatsappPrefill: project.code || "",
+        barrio: extractProjectBarrio(project?.name, project?.location_jsonb),
       }));
     }
 
     return assets.map((asset) => {
       const linkedProject = projectById.get(String(asset.project_id));
+      const projectCode = asset.project_code || linkedProject?.code || "";
       return {
         id: String(asset.id),
         title:
@@ -188,12 +236,9 @@
             ? `Canal: ${asset.channel}`
             : "",
         chips: Array.isArray(asset.chips) ? asset.chips : [],
-        projectCode: asset.project_code || linkedProject?.code || "",
-        whatsappPrefill:
-          asset.whatsapp_prefill ||
-          asset.project_code ||
-          linkedProject?.code ||
-          "",
+        projectCode,
+        whatsappPrefill: asset.whatsapp_prefill || projectCode,
+        barrio: extractProjectBarrio(asset.project_name || linkedProject?.name, linkedProject?.location_jsonb),
       };
     });
   };
@@ -398,19 +443,22 @@
     if (bootstrapLoaded) return;
     isBootstrapping = true;
     errorMessage = "";
+    whatsappPhoneError = "";
     try {
       const payload = await bootstrap({ cliente });
       ads = mapAds(payload);
-      const digits = String(payload?.whatsapp_demo_phone || "").replace(
-        /\D+/g,
-        "",
-      );
+      const digits = normalizePhoneDigits(payload?.whatsapp_demo_phone);
       if (digits) {
         demoWhatsAppPhone = digits;
+      } else {
+        demoWhatsAppPhone = "";
+        whatsappPhoneError = WHATSAPP_PHONE_LOAD_ERROR;
       }
       bootstrapLoaded = true;
     } catch (err) {
       errorMessage = err?.message || "No se pudo cargar bootstrap.";
+      demoWhatsAppPhone = "";
+      whatsappPhoneError = WHATSAPP_PHONE_LOAD_ERROR;
     } finally {
       isBootstrapping = false;
     }
@@ -696,6 +744,14 @@
   };
 
   onMount(() => {
+    const fromUrl =
+      typeof window !== "undefined"
+        ? String(new URLSearchParams(window.location.search).get("cliente") || "").trim()
+        : "";
+    if (fromUrl) {
+      cliente = fromUrl;
+    }
+
     const fromPage = String(cliente || "").trim();
     if (fromPage) {
       cliente = fromPage;
@@ -805,6 +861,11 @@
       <p class="text-xs text-slate-500">
         Vas a ver la conversación y su estado reflejados en el Orquestador.
       </p>
+      {#if whatsappPhoneError}
+        <div class="mt-3 alert alert-warning">
+          <span>{whatsappPhoneError}</span>
+        </div>
+      {/if}
 
       {#if isBootstrapping}
         <div class="mt-4 alert alert-info">
@@ -827,12 +888,14 @@
                   {/each}
                 </div>
                 <a
-                  href={buildWhatsAppUrl(
-                    ad.whatsappPrefill || ad.projectCode || ad.title,
-                  )}
-                  target="_blank"
-                  rel="noreferrer"
-                  class="btn btn-sm min-h-11 border-0 bg-[#25D366] text-white hover:bg-[#1EBE5D] inline-flex items-center gap-2"
+                  href={getAdWhatsAppUrl(ad) || undefined}
+                  target={getAdWhatsAppUrl(ad) ? "_blank" : undefined}
+                  rel={getAdWhatsAppUrl(ad) ? "noreferrer noopener" : undefined}
+                  aria-disabled={!getAdWhatsAppUrl(ad)}
+                  tabindex={getAdWhatsAppUrl(ad) ? undefined : "-1"}
+                  class={`btn btn-sm min-h-11 border-0 bg-[#25D366] text-white hover:bg-[#1EBE5D] inline-flex items-center gap-2 ${
+                    getAdWhatsAppUrl(ad) ? "" : "pointer-events-none opacity-60"
+                  }`}
                 >
                   <svg
                     xmlns={URL_SVG_XMLNS}

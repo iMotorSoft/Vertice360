@@ -17,6 +17,7 @@ export const URL_SSE = `${getRestBaseUrl()}/api/agui/stream`;
 
 // Centralized URL constants: avoid hardcoded URLs outside this file.
 export const URL_WA_ME = 'https://wa.me';
+export const URL_WA_API = 'https://api.whatsapp.com/send';
 export const URL_SVG_XMLNS = 'http://www.w3.org/2000/svg';
 export const URL_FONT_OUTFIT =
   'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap';

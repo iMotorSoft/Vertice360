@@ -9,6 +9,7 @@ Backend service built with Litestar (Python 3.12) and managed with `uv`.
 - Demo `vertice360-orquestador` uses `DB_PG_V360_URL` (must point to DB `v360` with `postgresql*` scheme).
 - Optional fallback is disabled by default: `ALLOW_FALLBACK_V360_DB=false`.
   - Enable fallback only if you explicitly want to use `VERTICE360_DB_URL` for this demo.
+- DB connectivity diagnostics protocol (including sandbox checks): `docs/operativa_conectividad_db.md`.
 
 ## Commands
 
