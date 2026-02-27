@@ -31,8 +31,10 @@
       return {
         title: "Ver o reenviar propuesta",
         submitLabel: "Reenviar propuesta",
-        helperText: "Podés reenviar o ajustar las opciones propuestas para confirmar la visita.",
-        defaultMessage: "Te reenvío las opciones de visita para que podamos confirmar.",
+        helperText:
+          "Podés reenviar o ajustar las opciones propuestas para confirmar la visita.",
+        defaultMessage:
+          "Te reenvío las opciones de visita para que podamos confirmar.",
       };
     }
     if (currentMode === "reagendar") {
@@ -46,7 +48,8 @@
     return {
       title: "Proponer visita",
       submitLabel: "Enviar opciones",
-      helperText: "Compartí opciones de día y horario para avanzar con la visita.",
+      helperText:
+        "Compartí opciones de día y horario para avanzar con la visita.",
       defaultMessage: "Hola, te comparto opciones para coordinar una visita.",
     };
   };
@@ -86,53 +89,187 @@
   };
 </script>
 
-<dialog class={`modal ${open ? "modal-open" : ""}`} aria-label="Proponer visita">
-  <div class="modal-box relative w-11/12 max-w-xl">
-    <button
-      type="button"
-      class="btn btn-ghost btn-sm absolute right-2 top-2"
-      aria-label="Cerrar modal de visita"
-      onclick={handleClose}
-      disabled={submitting}
-    >
-      ✕
-    </button>
-    <h3 class="text-lg font-semibold text-slate-900">{getModeConfig(mode).title}</h3>
-    <p class="text-sm text-slate-600 mt-1">
-      Cliente: <span class="font-medium">{cliente || "Sin cliente"}</span>
-    </p>
-    <p class="text-xs text-slate-500 mt-1">{getModeConfig(mode).helperText}</p>
+<dialog
+  class={`modal ${open ? "modal-open" : ""}`}
+  aria-label="Proponer visita"
+>
+  <div
+    class="modal-box h-screen w-screen max-w-none rounded-none p-4 md:p-6 md:h-auto md:w-11/12 md:max-w-xl md:rounded-2xl relative space-y-4 overflow-y-auto"
+  >
+    <header class="flex items-center justify-between mb-2 md:mb-0">
+      <h1 class="text-xl font-bold md:text-2xl">
+        {getModeConfig(mode).title}
+      </h1>
+      <button
+        type="button"
+        class="btn btn-ghost btn-circle btn-sm md:btn-xs absolute right-1 md:right-3 top-1 md:top-3"
+        aria-label="Cerrar modal de visita"
+        onclick={handleClose}
+        disabled={submitting}
+      >
+        ✕
+      </button>
+    </header>
 
-    <div class="mt-4 space-y-3">
-      <label class="form-control w-full">
-        <span class="label-text text-sm">Asesor</span>
-        <input class="input input-bordered min-h-11" type="text" bind:value={asesor} disabled={submitting} />
-      </label>
-
-      <label class="form-control w-full">
-        <span class="label-text text-sm">Opción 1 (día/hora)</span>
-        <input class="input input-bordered min-h-11" type="text" bind:value={opcion1} disabled={submitting} />
-      </label>
-
-      <label class="form-control w-full">
-        <span class="label-text text-sm">Opción 2 (día/hora)</span>
-        <input class="input input-bordered min-h-11" type="text" bind:value={opcion2} disabled={submitting} />
-      </label>
-
-      <label class="form-control w-full">
-        <span class="label-text text-sm">Opción 3 (opcional)</span>
-        <input class="input input-bordered min-h-11" type="text" bind:value={opcion3} disabled={submitting} />
-      </label>
-
-      <label class="form-control w-full">
-        <span class="label-text text-sm">Mensaje</span>
-        <textarea class="textarea textarea-bordered min-h-24" bind:value={mensaje} disabled={submitting}></textarea>
-      </label>
+    <div class="flex flex-col gap-1">
+      <p class="text-sm md:text-base text-slate-600 font-medium">
+        Cliente: <span class="font-medium">{cliente || "Sin cliente"}</span>
+      </p>
+      <p class="text-sm md:text-base text-slate-500">
+        {getModeConfig(mode).helperText}
+      </p>
     </div>
 
-    <div class="modal-action">
-      <button type="button" class="btn btn-ghost min-h-11" onclick={handleClose} disabled={submitting}>Cancelar</button>
-      <button type="button" class="btn btn-primary min-h-11" onclick={handleSend} disabled={submitting}
+    <ul class="mt-6 space-y-4">
+      <li class="flex flex-col gap-1">
+        <!-- svelte-ignore a11y_label_has_associated_control -->
+        <label class="flex items-center gap-2 px-1">
+          <!-- icono user -->
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="text-slate-400"
+            ><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle
+              cx="12"
+              cy="7"
+              r="4"
+            /></svg
+          >
+          <span
+            class="text-xs font-semibold uppercase tracking-wider text-slate-500"
+            >Asesor</span
+          >
+        </label>
+        <input
+          class="input input-bordered w-full bg-slate-50 focus:bg-white transition-colors"
+          type="text"
+          placeholder="Nombre del asesor"
+          bind:value={asesor}
+          disabled={submitting}
+        />
+      </li>
+
+      <li class="flex flex-col gap-2">
+        <label class="flex items-center gap-2 px-1">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="text-slate-400"
+            ><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line
+              x1="16"
+              y1="2"
+              x2="16"
+              y2="6"
+            /><line x1="8" y1="2" x2="8" y2="6" /><line
+              x1="3"
+              y1="10"
+              x2="21"
+              y2="10"
+            /></svg
+          >
+          <span
+            class="text-xs font-semibold uppercase tracking-wider text-slate-500"
+            >Opciones de Día y Horario</span
+          >
+        </label>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 px-0.5">
+          <div class="flex flex-col gap-1">
+            <span class="text-[10px] text-slate-400 font-medium px-1"
+              >Opción 1</span
+            >
+            <input
+              class="input input-bordered w-full bg-slate-50 focus:bg-white transition-colors text-sm h-11"
+              type="text"
+              placeholder="Día y hora sugerida"
+              bind:value={opcion1}
+              disabled={submitting}
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-[10px] text-slate-400 font-medium px-1"
+              >Opción 2</span
+            >
+            <input
+              class="input input-bordered w-full bg-slate-50 focus:bg-white transition-colors text-sm h-11"
+              type="text"
+              placeholder="Otra alternativa"
+              bind:value={opcion2}
+              disabled={submitting}
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-[10px] text-slate-400 font-medium px-1"
+              >Opción 3</span
+            >
+            <input
+              class="input input-bordered w-full bg-slate-50 focus:bg-white transition-colors text-sm h-11"
+              type="text"
+              placeholder="Opcional"
+              bind:value={opcion3}
+              disabled={submitting}
+            />
+          </div>
+        </div>
+      </li>
+
+      <li class="flex flex-col gap-1">
+        <!-- svelte-ignore a11y_label_has_associated_control -->
+        <label class="flex items-center gap-2 px-1">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="text-slate-400"
+            ><path
+              d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+            /></svg
+          >
+          <span
+            class="text-xs font-semibold uppercase tracking-wider text-slate-500"
+            >Mensaje</span
+          >
+        </label>
+        <textarea
+          class="textarea textarea-bordered min-h-24 w-full bg-slate-50 focus:bg-white transition-colors p-3"
+          placeholder="Mensaje para el cliente..."
+          bind:value={mensaje}
+          disabled={submitting}
+        ></textarea>
+      </li>
+    </ul>
+
+    <div class="modal-action justify-between">
+      <button
+        type="button"
+        class="btn btn-secondary"
+        onclick={handleClose}
+        disabled={submitting}>Cancelar</button
+      >
+      <button
+        type="button"
+        class="btn btn-primary"
+        onclick={handleSend}
+        disabled={submitting}
         >{submitting ? "Enviando..." : getModeConfig(mode).submitLabel}</button
       >
     </div>

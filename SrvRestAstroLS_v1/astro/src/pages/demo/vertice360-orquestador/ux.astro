@@ -5,7 +5,7 @@ import OrquestadorApp from "../../../components/demo/vertice360-orquestador/Orqu
 
 const branding = {
   displayName: "Vertice360 Demo",
-  logoUrl: "/logo-placeholder.svg",
+  logoUrl: "/logo_v360.png",
   primaryColor: "#0F766E",
   secondaryColor: "#38BDF8",
   accentColor: "#F59E0B",
@@ -24,7 +24,9 @@ const branding = {
   <script is:inline>
     (() => {
       const applyMode = () => {
-        const clienteRaw = new URLSearchParams(window.location.search).get("cliente");
+        const clienteRaw = new URLSearchParams(window.location.search).get(
+          "cliente",
+        );
         const cliente = (clienteRaw ?? "").trim();
         const hasCliente = cliente.length > 0;
         const intro = document.getElementById("intro");

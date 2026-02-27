@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -23,6 +25,9 @@ body {
   --bg-main: #F5F7F8;
   --bg-card: #FFFFFF;
   --bg-card-secondary: #F7F7F7;
+
+  /* Typography */
+  --font-poppins: 'Poppins', system-ui, -apple-system, sans-serif;
 }
 
 h1 {
@@ -30,34 +35,93 @@ h1 {
   font-weight: bold;
   color: #055a42;
   font-size: xx-large;
+  font-family: var(--font-poppins);
 }
 
-.btn-primary {
-  background: linear-gradient(to bottom right, #065f46, #066e4e, #047857);
-  color: #F7F7F7;
+@media (max-width: 768px) {
+  h1 {
+    font-size: x-large;
+  }
+}
+
+@layer components {
+  /* Botón Principal (Marca) */
+  .btn-primary {
+    background: linear-gradient(to bottom right, #065f46, #066e4e, #047857);
+    color: #f7f7f7;
+    border-radius: 9999px;
+    border: none;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    box-shadow: none;
+    transition: all 0.2s ease;
+
+    /* MOBILE (default) */
+    padding: 10px 10px;
+    font-size: 0.875rem; /* 14px */
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(to top left, #055a42, #066e4e, #098b66);
+    color: #f7f7f7;
+  }
+
+  /* Botón Secundario (Outline) */
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 2px solid var(--text-secondary);
+    border-radius: 9999px;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    box-shadow: none;
+    transition: all 0.2s ease;
+
+    /* MOBILE (default) */
+    padding: 10px 10px; /* Un poco menos de padding vertical por el border 2px */
+    font-size: 0.875rem;
+  }
+
+  .btn-secondary:hover {
+    background: var(--bg-main);
+    border-color: var(--brand-secondary);
+    color: var(--brand-primary);
+  }
+
+  /* Media Queries para Desktop */
+  @screen md {
+    .btn-primary {
+      padding: 20px 20px;
+      font-size: 1rem;
+    }
+    .btn-secondary {
+      padding: 20px 20px;
+      font-size: 1rem;
+    }
+  }
+}
+.btn-ghost {
+  background: transparent !important; 
+  color: var(--text-primary) !important; 
   border-radius: 50px;
   padding: 20px 20px;
   box-shadow: none;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: 600;
+  gap: 10px;
 }
 
-.btn-primary:hover {
-  background:linear-gradient(to top left, #055a42, #066e4e, #098b66);
-  color: #F7F7F7;
-}
-
-.btn-secondary {
-  background: transparent; 
-  color: var(--text-secondary); 
-  border: 2px solid var(--text-secondary);
-  border-radius: 50px;
-  padding: 20px 20px;
-  box-shadow: none;
-}
-
-.btn-secondary:hover {
-  background: #e9e7e7;
-  border-color: var(--text-primary);
-  color: var(--text-primary);
+.btn-ghost:hover {
+  background: #e9e7e7 !important;
+  color: var(--text-primary) !important;
 }
 
 .card-primary {
