@@ -43,8 +43,9 @@ class VisitRescheduleRequest(BaseModel):
 
 
 class SupervisorSendRequest(BaseModel):
-    ticket_id: str = Field(..., min_length=1)
-    target: Literal["client", "advisor"]
+    ticket_id: str | None = Field(default=None, min_length=1)
+    lead_phone: str | None = Field(default=None, min_length=3)
+    target: Literal["client", "advisor"] = "client"
     text: str = Field(..., min_length=1)
 
 

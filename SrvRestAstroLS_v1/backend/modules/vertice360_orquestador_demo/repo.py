@@ -1,7 +1,27 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+_PROJECT_SCHEMA_CACHE: dict[str, list[str]] | None = None
+_PROJECT_CAPABILITIES_CACHE: dict[str, bool] | None = None
+
+_PROJECT_TABLE_KEYWORDS = (
+    "project",
+    "marketing",
+    "unit",
+    "price",
+    "availability",
+    "payment",
+    "finance",
+    "delivery",
+    "amenit",
+    "tipolog",
+)
 
 
 def _column_names(cursor: Any) -> list[str]:
@@ -26,6 +46,13 @@ def fetch_one(conn: Any, query: str, params: tuple[Any, ...] = ()) -> dict[str, 
         return None
     columns = _column_names(cursor)
     return dict(zip(columns, row, strict=False))
+
+
+def ensure_ticket_inbound_line_columns(conn: Any) -> None:
+    if not hasattr(conn, "execute"):
+        return
+    conn.execute("alter table tickets add column if not exists inbound_line_key text")
+    conn.execute("alter table tickets add column if not exists inbound_line_phone text")
 
 
 def list_projects(conn: Any) -> list[dict[str, Any]]:
@@ -87,9 +114,54 @@ def get_project_by_code(conn: Any, project_code: str) -> dict[str, Any] | None:
     )
 
 
+def get_project_by_id(conn: Any, project_id: str) -> dict[str, Any] | None:
+    return fetch_one(
+        conn,
+        """
+        select id, code, name
+        from projects
+        where id = %s
+        limit 1
+        """,
+        (project_id,),
+    )
+
+
 def list_project_codes(conn: Any) -> list[str]:
     rows = fetch_all(conn, "select code from projects order by code asc")
     return [str(row.get("code") or "") for row in rows if row.get("code")]
+
+
+def get_project_context(conn: Any, project_code: str) -> dict[str, Any] | None:
+    return fetch_one(
+        conn,
+        """
+        select
+            p.id,
+            p.code,
+            p.name,
+            p.description,
+            p.location_jsonb,
+            p.tags,
+            p.status,
+            ma.channel as asset_channel,
+            ma.title as asset_title,
+            ma.short_copy as asset_short_copy,
+            ma.chips as asset_chips
+        from projects p
+        left join lateral (
+            select channel, title, short_copy, chips
+            from marketing_assets
+            where project_id = p.id
+              and is_active = true
+            order by sort_order asc, created_at asc
+            limit 1
+        ) ma on true
+        where upper(p.code) = upper(%s)
+        limit 1
+        """,
+        (project_code,),
+    )
 
 
 def get_lead_by_phone(conn: Any, phone_e164: str) -> dict[str, Any] | None:
@@ -239,6 +311,7 @@ def touch_conversation_activity(conn: Any, conversation_id: str) -> None:
 
 
 def get_ticket_by_conversation(conn: Any, conversation_id: str) -> dict[str, Any] | None:
+    ensure_ticket_inbound_line_columns(conn)
     return fetch_one(
         conn,
         """
@@ -253,6 +326,8 @@ def get_ticket_by_conversation(conn: Any, conversation_id: str) -> dict[str, Any
             last_activity_at,
             last_message_snippet,
             visit_scheduled_at,
+            inbound_line_key,
+            inbound_line_phone,
             summary_jsonb,
             created_at,
             updated_at
@@ -271,6 +346,7 @@ def create_ticket(
     project_id: str | None,
     last_message_snippet: str,
 ) -> dict[str, Any]:
+    ensure_ticket_inbound_line_columns(conn)
     row = fetch_one(
         conn,
         """
@@ -306,6 +382,8 @@ def create_ticket(
             last_activity_at,
             last_message_snippet,
             visit_scheduled_at,
+            inbound_line_key,
+            inbound_line_phone,
             summary_jsonb,
             created_at,
             updated_at
@@ -327,6 +405,7 @@ def update_ticket_activity(
     last_message_snippet: str | None = None,
     visit_scheduled_at: Any | None = None,
 ) -> dict[str, Any]:
+    ensure_ticket_inbound_line_columns(conn)
     sets = ["last_activity_at = now()", "updated_at = now()"]
     params: list[Any] = []
 
@@ -363,6 +442,8 @@ def update_ticket_activity(
             last_activity_at,
             last_message_snippet,
             visit_scheduled_at,
+            inbound_line_key,
+            inbound_line_phone,
             summary_jsonb,
             created_at,
             updated_at
@@ -379,6 +460,7 @@ def update_ticket_requirements(
     ticket_id: str,
     requirements_patch: dict[str, Any],
 ) -> dict[str, Any]:
+    ensure_ticket_inbound_line_columns(conn)
     row = fetch_one(
         conn,
         """
@@ -402,11 +484,50 @@ def update_ticket_requirements(
             last_activity_at,
             last_message_snippet,
             visit_scheduled_at,
+            inbound_line_key,
+            inbound_line_phone,
             summary_jsonb,
             created_at,
             updated_at
         """,
         (json.dumps(requirements_patch or {}, default=str), ticket_id),
+    )
+    if row is None:
+        raise KeyError("ticket not found")
+    return row
+
+
+def merge_ticket_summary(
+    conn: Any,
+    ticket_id: str,
+    summary_patch: dict[str, Any],
+) -> dict[str, Any]:
+    ensure_ticket_inbound_line_columns(conn)
+    row = fetch_one(
+        conn,
+        """
+        update tickets
+        set summary_jsonb = coalesce(summary_jsonb, '{}'::jsonb) || %s::jsonb,
+            last_activity_at = now(),
+            updated_at = now()
+        where id = %s
+        returning
+            id,
+            conversation_id,
+            lead_id,
+            project_id,
+            stage,
+            assigned_advisor_id,
+            last_activity_at,
+            last_message_snippet,
+            visit_scheduled_at,
+            inbound_line_key,
+            inbound_line_phone,
+            summary_jsonb,
+            created_at,
+            updated_at
+        """,
+        (json.dumps(summary_patch or {}, default=str), ticket_id),
     )
     if row is None:
         raise KeyError("ticket not found")
@@ -454,6 +575,67 @@ def insert_message(
     return row
 
 
+def ensure_messages_provider_columns(conn: Any) -> None:
+    conn.execute("alter table messages add column if not exists provider_name text")
+    conn.execute("alter table messages add column if not exists provider_status text")
+    conn.execute("alter table messages add column if not exists provider_response_jsonb jsonb")
+    conn.execute("alter table messages add column if not exists provider_error text")
+    conn.execute("alter table messages add column if not exists sent_at timestamptz")
+
+
+def update_message_provider_result(
+    conn: Any,
+    *,
+    message_id: str,
+    provider_name: str,
+    provider_status: str,
+    provider_message_id: str | None,
+    provider_response: dict[str, Any] | None,
+    provider_error: str | None,
+    sent_at: Any | None,
+) -> dict[str, Any]:
+    row = fetch_one(
+        conn,
+        """
+        update messages
+        set provider_name = %s,
+            provider_status = %s,
+            provider_message_id = coalesce(%s, provider_message_id),
+            provider_response_jsonb = %s::jsonb,
+            provider_error = %s,
+            sent_at = %s
+        where id = %s
+        returning
+            id,
+            conversation_id,
+            lead_id,
+            direction,
+            actor,
+            text,
+            provider_message_id,
+            provider_name,
+            provider_status,
+            provider_response_jsonb,
+            provider_error,
+            sent_at,
+            provider_meta_jsonb,
+            created_at
+        """,
+        (
+            provider_name,
+            provider_status,
+            provider_message_id,
+            json.dumps(provider_response or {}, default=str),
+            provider_error,
+            sent_at,
+            message_id,
+        ),
+    )
+    if row is None:
+        raise KeyError("message not found")
+    return row
+
+
 def insert_event(
     conn: Any,
     *,
@@ -484,6 +666,7 @@ def insert_event(
 
 
 def get_ticket_context(conn: Any, ticket_id: str) -> dict[str, Any] | None:
+    ensure_ticket_inbound_line_columns(conn)
     return fetch_one(
         conn,
         """
@@ -497,11 +680,14 @@ def get_ticket_context(conn: Any, ticket_id: str) -> dict[str, Any] | None:
             t.last_activity_at,
             t.last_message_snippet,
             t.visit_scheduled_at,
+            t.inbound_line_key,
+            t.inbound_line_phone,
             t.summary_jsonb,
             t.created_at,
             t.updated_at,
             l.phone_e164,
             l.name as lead_name,
+            au.phone_e164 as assigned_advisor_phone_e164,
             p.code as project_code,
             p.name as project_name,
             c.status as conversation_status,
@@ -510,6 +696,7 @@ def get_ticket_context(conn: Any, ticket_id: str) -> dict[str, Any] | None:
         from tickets t
         join leads l on l.id = t.lead_id
         left join projects p on p.id = t.project_id
+        left join users au on au.id = t.assigned_advisor_id
         join conversations c on c.id = t.conversation_id
         where t.id = %s
         limit 1
@@ -723,6 +910,7 @@ def insert_visit_confirmation(
 
 
 def get_dashboard_ticket_rows(conn: Any, cliente: str | None) -> list[dict[str, Any]]:
+    ensure_ticket_inbound_line_columns(conn)
     clean = str(cliente or "").strip()
     like = f"%{clean}%" if clean else ""
     return fetch_all(
@@ -737,6 +925,8 @@ def get_dashboard_ticket_rows(conn: Any, cliente: str | None) -> list[dict[str, 
             t.last_activity_at,
             t.last_message_snippet,
             t.visit_scheduled_at,
+            t.inbound_line_key as ticket_inbound_line_key,
+            t.inbound_line_phone as ticket_inbound_line_phone,
             t.summary_jsonb,
             t.created_at,
             t.updated_at,
@@ -752,6 +942,11 @@ def get_dashboard_ticket_rows(conn: Any, cliente: str | None) -> list[dict[str, 
             lm.direction as last_message_direction,
             lm.actor as last_message_actor,
             lm.created_at as last_message_at,
+            nullif(li.provider_meta_jsonb->>'inbound_line_key', '') as message_inbound_line_key,
+            nullif(li.provider_meta_jsonb->>'inbound_line_phone', '') as message_inbound_line_phone,
+            nullif(li.provider_meta_jsonb->>'to', '') as message_to_phone,
+            nullif(li.provider_meta_jsonb->>'phone_number_id', '') as message_phone_number_id,
+            nullif(li.provider_meta_jsonb->>'provider', '') as message_provider,
             case
                 when %s <> '' and (
                     l.phone_e164 ilike %s
@@ -769,6 +964,14 @@ def get_dashboard_ticket_rows(conn: Any, cliente: str | None) -> list[dict[str, 
             order by m.created_at desc
             limit 1
         ) lm on true
+        left join lateral (
+            select m.provider_meta_jsonb
+            from messages m
+            where m.conversation_id = t.conversation_id
+              and m.direction = 'in'
+            order by m.created_at desc
+            limit 1
+        ) li on true
         order by cliente_match desc,
                  coalesce(t.last_activity_at, t.updated_at, t.created_at) desc
         """,
@@ -807,6 +1010,7 @@ def get_dashboard_kpis(conn: Any) -> dict[str, Any]:
 
 
 def get_ticket_detail(conn: Any, ticket_id: str) -> dict[str, Any] | None:
+    ensure_ticket_inbound_line_columns(conn)
     return fetch_one(
         conn,
         """
@@ -820,6 +1024,8 @@ def get_ticket_detail(conn: Any, ticket_id: str) -> dict[str, Any] | None:
             t.last_activity_at,
             t.last_message_snippet,
             t.visit_scheduled_at,
+            t.inbound_line_key,
+            t.inbound_line_phone,
             t.summary_jsonb,
             t.created_at,
             t.updated_at,
@@ -838,6 +1044,34 @@ def get_ticket_detail(conn: Any, ticket_id: str) -> dict[str, Any] | None:
         limit 1
         """,
         (ticket_id,),
+    )
+
+
+def set_ticket_inbound_line(
+    conn: Any,
+    *,
+    ticket_id: str,
+    inbound_line_key: str | None,
+    inbound_line_phone: str | None = None,
+) -> dict[str, Any] | None:
+    if not hasattr(conn, "execute"):
+        return None
+    ensure_ticket_inbound_line_columns(conn)
+    return fetch_one(
+        conn,
+        """
+        update tickets
+        set inbound_line_key = coalesce(nullif(%s, ''), inbound_line_key),
+            inbound_line_phone = coalesce(nullif(%s, ''), inbound_line_phone),
+            updated_at = now()
+        where id = %s
+        returning id, inbound_line_key, inbound_line_phone
+        """,
+        (
+            str(inbound_line_key or "").strip() or None,
+            str(inbound_line_phone or "").strip() or None,
+            ticket_id,
+        ),
     )
 
 
@@ -926,3 +1160,1045 @@ def get_active_visit_proposal_for_ticket(conn: Any, ticket_id: str) -> dict[str,
         """,
         (ticket_id,),
     )
+
+
+def _safe_identifier(name: str) -> str:
+    candidate = str(name or "").strip()
+    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", candidate):
+        raise ValueError(f"invalid SQL identifier: {candidate!r}")
+    return candidate
+
+
+def _q(name: str) -> str:
+    return f'"{_safe_identifier(name)}"'
+
+
+def _compact_sql(query: str) -> str:
+    return " ".join(str(query or "").split())
+
+
+def _dedupe_sources(values: list[str]) -> list[str]:
+    items: list[str] = []
+    for raw in values:
+        clean = str(raw or "").strip()
+        if clean and clean not in items:
+            items.append(clean)
+    return items
+
+
+def _log_knowledge_sql(name: str, query: str, params: tuple[Any, ...]) -> None:
+    logger.info(
+        "ORQ_KNOWLEDGE_SQL name=%s sql=%s params=%s",
+        name,
+        _compact_sql(query),
+        params,
+    )
+
+
+def _fetch_all_knowledge(
+    conn: Any,
+    name: str,
+    query: str,
+    params: tuple[Any, ...] = (),
+) -> list[dict[str, Any]]:
+    _log_knowledge_sql(name, query, params)
+    return fetch_all(conn, query, params)
+
+
+def _fetch_one_knowledge(
+    conn: Any,
+    name: str,
+    query: str,
+    params: tuple[Any, ...] = (),
+) -> dict[str, Any] | None:
+    _log_knowledge_sql(name, query, params)
+    return fetch_one(conn, query, params)
+
+
+def _find_column(
+    columns: list[str],
+    *,
+    exact: tuple[str, ...] = (),
+    contains: tuple[str, ...] = (),
+) -> str | None:
+    lower_columns = [str(col or "").lower() for col in columns]
+    for candidate in exact:
+        clean = str(candidate or "").lower()
+        if clean in lower_columns:
+            return clean
+    for token in contains:
+        clean_token = str(token or "").lower()
+        for col in lower_columns:
+            if clean_token and clean_token in col:
+                return col
+    return None
+
+
+def _is_project_knowledge_table(table_name: str) -> bool:
+    clean = str(table_name or "").lower()
+    if clean in {
+        "projects",
+        "marketing_assets",
+        "units",
+        "unidades",
+        "unit_types",
+        "price_lists",
+        "availability",
+        "payment_plans",
+        "financing_terms",
+    }:
+        return True
+    return any(keyword in clean for keyword in _PROJECT_TABLE_KEYWORDS)
+
+
+def discover_project_schema(
+    conn: Any,
+    *,
+    force_refresh: bool = False,
+) -> dict[str, list[str]]:
+    global _PROJECT_SCHEMA_CACHE
+    if _PROJECT_SCHEMA_CACHE is not None and not force_refresh:
+        return dict(_PROJECT_SCHEMA_CACHE)
+
+    rows = _fetch_all_knowledge(
+        conn,
+        "discover_project_schema",
+        """
+        select lower(table_name) as table_name, lower(column_name) as column_name
+        from information_schema.columns
+        where table_schema = current_schema()
+        order by table_name asc, ordinal_position asc
+        """,
+    )
+    schema_map: dict[str, list[str]] = {}
+    for row in rows:
+        table_name = str(row.get("table_name") or "").lower()
+        column_name = str(row.get("column_name") or "").lower()
+        if not table_name or not column_name:
+            continue
+        if not _is_project_knowledge_table(table_name):
+            continue
+        schema_map.setdefault(table_name, []).append(column_name)
+
+    _PROJECT_SCHEMA_CACHE = schema_map
+    return dict(schema_map)
+
+
+def _find_table(schema_map: dict[str, list[str]], candidates: tuple[str, ...]) -> str | None:
+    for name in candidates:
+        clean = str(name or "").lower()
+        if clean in schema_map:
+            return clean
+    return None
+
+
+def _find_tables_containing(
+    schema_map: dict[str, list[str]],
+    token: str,
+) -> list[str]:
+    clean = str(token or "").lower()
+    return [name for name in schema_map if clean and clean in name]
+
+
+def _table_exists(schema_map: dict[str, list[str]], table_name: str) -> bool:
+    return str(table_name or "").lower() in schema_map
+
+
+def _table_row_count(conn: Any, table_name: str) -> int:
+    safe_table = _q(str(table_name).lower())
+    query = f"select count(*)::int as total from {safe_table}"
+    row = _fetch_one_knowledge(conn, "table_row_count", query)
+    if not row:
+        return 0
+    return int(row.get("total") or 0)
+
+
+def get_demo_project_facts(conn: Any, project_code: str) -> dict[str, Any] | None:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return None
+    schema_map = discover_project_schema(conn)
+    if not _table_exists(schema_map, "demo_project_facts"):
+        return None
+    row = _fetch_one_knowledge(
+        conn,
+        "get_demo_project_facts",
+        """
+        select *
+        from demo_project_facts
+        where upper(project_code) = upper(%s)
+        limit 1
+        """,
+        (clean_code,),
+    )
+    if row:
+        row["_source_table"] = "demo_project_facts"
+    return row
+
+
+def list_demo_units(
+    conn: Any,
+    project_code: str,
+    *,
+    rooms: int | None = None,
+    currency: str | None = None,
+) -> list[dict[str, Any]]:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return []
+    schema_map = discover_project_schema(conn)
+    if not _table_exists(schema_map, "demo_units"):
+        return []
+
+    where_clauses = ["upper(project_code) = upper(%s)"]
+    params: list[Any] = [clean_code]
+    if rooms is not None:
+        where_clauses.append("rooms_count = %s")
+        params.append(int(rooms))
+    if currency:
+        where_clauses.append("upper(currency) = upper(%s)")
+        params.append(str(currency))
+
+    query = (
+        """
+        select
+            workspace_id,
+            project_code,
+            unit_id,
+            unit_code,
+            typology,
+            rooms_label,
+            rooms_count,
+            bedrooms,
+            bathrooms,
+            surface_total_m2,
+            surface_covered_m2,
+            currency,
+            list_price,
+            availability_status,
+            features_jsonb,
+            source_url
+        from demo_units
+        where """
+        + " and ".join(where_clauses)
+        + """
+        order by rooms_count asc nulls last, list_price asc nulls last, unit_id asc
+        """
+    )
+    rows = _fetch_all_knowledge(conn, "list_demo_units", query, tuple(params))
+    for row in rows:
+        row["_source_table"] = "demo_units"
+    return rows
+
+
+def _has_project_scope(schema_map: dict[str, list[str]], table_name: str) -> bool:
+    table_columns = schema_map.get(str(table_name or "").lower(), [])
+    if not table_columns:
+        return False
+    direct_project_col = _find_column(
+        table_columns,
+        exact=("project_code", "code", "codigo_proyecto"),
+        contains=("project_code", "codigo", "proyecto"),
+    )
+    if direct_project_col:
+        return True
+    project_id_col = _find_column(
+        table_columns,
+        exact=("project_id", "id_project", "projectid", "fk_project"),
+        contains=("project_id", "id_project"),
+    )
+    if not project_id_col:
+        return False
+    projects_table = _find_table(schema_map, ("projects",))
+    if not projects_table:
+        return False
+    project_columns = schema_map.get(projects_table, [])
+    project_id = _find_column(project_columns, exact=("id", "project_id"))
+    project_code = _find_column(
+        project_columns,
+        exact=("code", "project_code", "codigo"),
+        contains=("code", "codigo"),
+    )
+    return bool(project_id and project_code)
+
+
+def _project_scope_sql(
+    schema_map: dict[str, list[str]],
+    table_name: str,
+    table_alias: str,
+    project_code: str,
+) -> tuple[str, str, tuple[Any, ...]] | None:
+    clean_table = str(table_name or "").lower()
+    columns = schema_map.get(clean_table, [])
+    if not columns:
+        return None
+
+    if clean_table == "projects":
+        code_col = _find_column(
+            columns,
+            exact=("code", "project_code", "codigo"),
+            contains=("code", "codigo"),
+        )
+        if not code_col:
+            return None
+        return (
+            "",
+            f"upper({table_alias}.{_q(code_col)}::text) = upper(%s)",
+            (project_code,),
+        )
+
+    direct_code_col = _find_column(
+        columns,
+        exact=("project_code", "code", "codigo_proyecto"),
+        contains=("project_code", "codigo_proyecto"),
+    )
+    if direct_code_col:
+        return (
+            "",
+            f"upper({table_alias}.{_q(direct_code_col)}::text) = upper(%s)",
+            (project_code,),
+        )
+
+    project_id_col = _find_column(
+        columns,
+        exact=("project_id", "id_project", "projectid", "fk_project"),
+        contains=("project_id", "id_project"),
+    )
+    if not project_id_col:
+        return None
+
+    projects_table = _find_table(schema_map, ("projects",))
+    if not projects_table:
+        return None
+    project_columns = schema_map.get(projects_table, [])
+    project_id = _find_column(project_columns, exact=("id", "project_id"))
+    project_code_col = _find_column(
+        project_columns,
+        exact=("code", "project_code", "codigo"),
+        contains=("code", "codigo"),
+    )
+    if not project_id or not project_code_col:
+        return None
+
+    join_sql = (
+        f" join {_q(projects_table)} p"
+        f" on p.{_q(project_id)} = {table_alias}.{_q(project_id_col)} "
+    )
+    where_sql = f"upper(p.{_q(project_code_col)}::text) = upper(%s)"
+    return join_sql, where_sql, (project_code,)
+
+
+def get_project_capabilities(
+    conn: Any,
+    *,
+    force_refresh: bool = False,
+) -> dict[str, bool]:
+    global _PROJECT_CAPABILITIES_CACHE
+    if _PROJECT_CAPABILITIES_CACHE is not None and not force_refresh:
+        return dict(_PROJECT_CAPABILITIES_CACHE)
+
+    schema_map = discover_project_schema(conn, force_refresh=force_refresh)
+    projects_table = _find_table(schema_map, ("projects",))
+    project_cols = schema_map.get(projects_table or "", [])
+    marketing_table = _find_table(schema_map, ("marketing_assets",))
+    units_table = _find_table(schema_map, ("demo_units", "unit_types", "units", "unidades"))
+    demo_facts_table = _find_table(schema_map, ("demo_project_facts",))
+    demo_units_table = _find_table(schema_map, ("demo_units",))
+
+    def _table_with_price() -> str | None:
+        preferred = ("units", "unidades", "price_lists", "prices", "unit_prices")
+        for name in preferred:
+            if name not in schema_map:
+                continue
+            cols = schema_map[name]
+            price_col = _find_column(
+                cols,
+                exact=("price", "list_price", "price_amount", "precio", "amount", "value"),
+                contains=("price", "precio"),
+            )
+            if price_col and _has_project_scope(schema_map, name):
+                return name
+        for table_name, cols in schema_map.items():
+            price_col = _find_column(cols, contains=("price", "precio"))
+            if price_col and _has_project_scope(schema_map, table_name):
+                return table_name
+        return None
+
+    def _table_with_availability() -> str | None:
+        preferred = ("availability", "units", "unidades")
+        for name in preferred:
+            if name not in schema_map:
+                continue
+            cols = schema_map[name]
+            status_col = _find_column(
+                cols,
+                exact=("status", "availability_status", "estado", "state"),
+                contains=("status", "estado", "dispon"),
+            )
+            bool_col = _find_column(
+                cols,
+                exact=("is_available", "available"),
+                contains=("available", "dispon"),
+            )
+            if (status_col or bool_col) and _has_project_scope(schema_map, name):
+                return name
+        return None
+
+    def _table_with_financing() -> str | None:
+        preferred = ("payment_plans", "financing_terms", "financing", "payment_options")
+        for name in preferred:
+            if name in schema_map and _has_project_scope(schema_map, name):
+                return name
+        for name in _find_tables_containing(schema_map, "financ"):
+            if _has_project_scope(schema_map, name):
+                return name
+        for name in _find_tables_containing(schema_map, "payment"):
+            if _has_project_scope(schema_map, name):
+                return name
+        return None
+
+    delivery_col = _find_column(
+        project_cols,
+        exact=(
+            "delivery_date",
+            "estimated_delivery_date",
+            "entrega_estimada",
+            "handover_date",
+            "possession_date",
+            "delivery_at",
+        ),
+        contains=("delivery", "entrega", "posesion", "handover"),
+    )
+
+    demo_prices_loaded = False
+    demo_financing_loaded = False
+    demo_delivery_loaded = False
+    if demo_units_table:
+        price_row = _fetch_one_knowledge(
+            conn,
+            "capabilities_demo_prices",
+            "select count(*)::int as total from demo_units where list_price is not null",
+        )
+        demo_prices_loaded = bool(int((price_row or {}).get("total") or 0) > 0)
+    if demo_facts_table:
+        financing_row = _fetch_one_knowledge(
+            conn,
+            "capabilities_demo_financing",
+            """
+            select count(*)::int as total
+            from demo_project_facts
+            where financing_jsonb is not null
+              and financing_jsonb::text not in ('null', '{}')
+            """,
+        )
+        demo_financing_loaded = bool(int((financing_row or {}).get("total") or 0) > 0)
+        delivery_row = _fetch_one_knowledge(
+            conn,
+            "capabilities_demo_delivery",
+            """
+            select count(*)::int as total
+            from demo_project_facts
+            where construction_jsonb ? 'delivery_estimated_at'
+            """,
+        )
+        demo_delivery_loaded = bool(int((delivery_row or {}).get("total") or 0) > 0)
+
+    capabilities = {
+        "project_overview": bool(projects_table),
+        "location": bool(projects_table and _find_column(project_cols, contains=("location", "barrio", "zona", "address", "direccion"))),
+        "amenities": bool(
+            demo_facts_table
+            or marketing_table
+            or (projects_table and _find_column(project_cols, contains=("amenit", "tag", "feature", "servicio", "domot", "seguridad")))
+        ),
+        "marketing_assets": bool(marketing_table),
+        "unit_types": bool((demo_units_table and _table_row_count(conn, demo_units_table) >= 0) or (units_table and _has_project_scope(schema_map, units_table))),
+        "prices_by_rooms": bool(demo_prices_loaded or _table_with_price()),
+        "availability_by_rooms": bool((demo_units_table and _table_row_count(conn, demo_units_table) > 0) or _table_with_availability()),
+        "financing": bool(
+            demo_financing_loaded
+            or _table_with_financing()
+            or (projects_table and _find_column(project_cols, contains=("financ", "cuota", "payment", "anticipo")))
+        ),
+        "delivery_date": bool(
+            demo_delivery_loaded
+            or delivery_col
+            or _find_table(schema_map, ("deliveries", "project_delivery", "delivery_schedule"))
+        ),
+    }
+
+    _PROJECT_CAPABILITIES_CACHE = capabilities
+    return dict(capabilities)
+
+
+def get_project_schema_and_capabilities(
+    conn: Any,
+    *,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
+    schema_map = discover_project_schema(conn, force_refresh=force_refresh)
+    capabilities = get_project_capabilities(conn, force_refresh=force_refresh)
+    return {
+        "schema_map": schema_map,
+        "capabilities": capabilities,
+    }
+
+
+def get_project_overview(conn: Any, project_code: str) -> dict[str, Any] | None:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return None
+
+    facts = get_demo_project_facts(conn, clean_code)
+    schema_map = discover_project_schema(conn)
+    projects_table = _find_table(schema_map, ("projects",))
+    base: dict[str, Any] | None = None
+    if projects_table:
+        scope = _project_scope_sql(schema_map, projects_table, "p", clean_code)
+        if scope is not None:
+            join_sql, where_sql, params = scope
+            query = (
+                f"select p.* from {_q(projects_table)} p "
+                f"{join_sql} where {where_sql} limit 1"
+            )
+            base = _fetch_one_knowledge(conn, "get_project_overview", query, params)
+            if isinstance(base, dict):
+                base["_source_table"] = projects_table
+
+    if facts is None:
+        return base
+
+    merged = dict(base or {})
+    merged["code"] = str(merged.get("code") or facts.get("project_code") or clean_code)
+    merged["description"] = str(facts.get("description") or merged.get("description") or "")
+    if facts.get("location_jsonb"):
+        merged["location_jsonb"] = facts.get("location_jsonb")
+    if facts.get("tags_jsonb"):
+        merged["tags"] = facts.get("tags_jsonb")
+    if facts.get("amenities_jsonb"):
+        merged["amenities"] = facts.get("amenities_jsonb")
+    if facts.get("construction_jsonb"):
+        merged["construction"] = facts.get("construction_jsonb")
+    if facts.get("financing_jsonb"):
+        merged["financing"] = facts.get("financing_jsonb")
+    if facts.get("unit_types_jsonb"):
+        merged["unit_types"] = facts.get("unit_types_jsonb")
+    merged["_source_table"] = "demo_project_facts"
+    merged["_source_tables"] = _dedupe_sources(
+        [
+            "demo_project_facts",
+            str((base or {}).get("_source_table") or ""),
+        ]
+    )
+    return merged
+
+
+def get_project_marketing_assets(conn: Any, project_code: str) -> list[dict[str, Any]]:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return []
+
+    schema_map = discover_project_schema(conn)
+    table_name = _find_table(schema_map, ("marketing_assets",))
+    if not table_name:
+        return []
+
+    table_cols = schema_map.get(table_name, [])
+    scope = _project_scope_sql(schema_map, table_name, "ma", clean_code)
+    if scope is None:
+        return []
+    join_sql, where_sql, params = scope
+
+    active_col = _find_column(table_cols, exact=("is_active", "active"), contains=("active",))
+    sort_col = _find_column(table_cols, exact=("sort_order", "priority"), contains=("sort", "priority"))
+    created_col = _find_column(table_cols, exact=("created_at",), contains=("created",))
+
+    where_clauses = [where_sql]
+    if active_col:
+        where_clauses.append(f"coalesce(ma.{_q(active_col)}, true) = true")
+
+    order_clauses: list[str] = []
+    if sort_col:
+        order_clauses.append(f"ma.{_q(sort_col)} asc")
+    if created_col:
+        order_clauses.append(f"ma.{_q(created_col)} asc")
+    if not order_clauses:
+        order_clauses.append("1 asc")
+
+    query = (
+        f"select ma.* from {_q(table_name)} ma {join_sql}"
+        f" where {' and '.join(where_clauses)}"
+        f" order by {', '.join(order_clauses)}"
+        " limit 30"
+    )
+    rows = _fetch_all_knowledge(conn, "get_project_marketing_assets", query, params)
+    for row in rows:
+        row["_source_table"] = table_name
+    if rows:
+        return rows
+
+    facts = get_demo_project_facts(conn, clean_code)
+    if isinstance(facts, dict):
+        chips = facts.get("amenities_jsonb")
+        if not isinstance(chips, list):
+            chips = facts.get("tags_jsonb")
+        return [
+            {
+                "title": clean_code,
+                "short_copy": facts.get("description"),
+                "chips": chips if isinstance(chips, list) else [],
+                "_source_table": "demo_project_facts",
+            }
+        ]
+    return rows
+
+
+def get_unit_types(conn: Any, project_code: str) -> list[dict[str, Any]]:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return []
+
+    schema_map = discover_project_schema(conn)
+    demo_units = list_demo_units(conn, clean_code)
+    if demo_units:
+        grouped: dict[tuple[str, str], int] = {}
+        for unit in demo_units:
+            rooms = str(unit.get("rooms_count") or "").strip()
+            label = str(unit.get("rooms_label") or unit.get("typology") or "").strip()
+            key = (rooms, label)
+            grouped[key] = grouped.get(key, 0) + 1
+        output: list[dict[str, Any]] = []
+        for (rooms, label), count in sorted(grouped.items(), key=lambda item: (item[0][0], item[0][1])):
+            output.append(
+                {
+                    "rooms": rooms or None,
+                    "label": label or None,
+                    "units_count": count,
+                    "_source_table": "demo_units",
+                }
+            )
+        if output:
+            return output
+
+    table_name = _find_table(schema_map, ("demo_units", "unit_types", "units", "unidades"))
+    if not table_name:
+        facts = get_demo_project_facts(conn, clean_code)
+        unit_types = facts.get("unit_types_jsonb") if isinstance(facts, dict) else []
+        if isinstance(unit_types, list) and unit_types:
+            return [
+                {"rooms": None, "label": str(item), "units_count": None, "_source_table": "demo_project_facts"}
+                for item in unit_types
+            ]
+        return []
+    table_cols = schema_map.get(table_name, [])
+    scope = _project_scope_sql(schema_map, table_name, "u", clean_code)
+    if scope is None:
+        return []
+    join_sql, where_sql, params = scope
+
+    rooms_col = _find_column(
+        table_cols,
+        exact=("rooms", "ambientes", "room_count", "num_rooms", "bedrooms"),
+        contains=("room", "ambiente", "bed"),
+    )
+    label_col = _find_column(
+        table_cols,
+        exact=("unit_type", "typology", "tipo_unidad", "label", "name", "ambiente"),
+        contains=("typolog", "tipo", "ambiente", "name", "label"),
+    )
+    if not rooms_col and not label_col:
+        return []
+
+    rooms_expr = f"u.{_q(rooms_col)}::text" if rooms_col else "null::text"
+    label_expr = f"u.{_q(label_col)}::text" if label_col else "null::text"
+    query = (
+        "select "
+        f"{rooms_expr} as rooms, "
+        f"{label_expr} as label, "
+        "count(*)::int as units_count "
+        f"from {_q(table_name)} u {join_sql}"
+        f" where {where_sql}"
+        " group by 1, 2"
+        " order by 1 nulls last, 2 asc"
+        " limit 30"
+    )
+    rows = _fetch_all_knowledge(conn, "get_unit_types", query, params)
+    for row in rows:
+        row["_source_table"] = table_name
+    return rows
+
+
+def get_prices_by_rooms(
+    conn: Any,
+    project_code: str,
+    rooms: int | None = None,
+    currency: str | None = None,
+) -> list[dict[str, Any]]:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return []
+
+    clean_currency = str(currency or "").strip().upper() or None
+    demo_rows = list_demo_units(
+        conn,
+        clean_code,
+        rooms=rooms,
+        currency=clean_currency,
+    )
+    priced_demo = [row for row in demo_rows if row.get("list_price") is not None]
+    if priced_demo:
+        mapped: list[dict[str, Any]] = []
+        for row in priced_demo:
+            mapped.append(
+                {
+                    "rooms": row.get("rooms_count"),
+                    "price": row.get("list_price"),
+                    "currency": row.get("currency"),
+                    "status": row.get("availability_status"),
+                    "unit_ref": row.get("unit_code") or row.get("unit_id"),
+                    "_source_table": "demo_units",
+                }
+            )
+        return mapped
+
+    schema_map = discover_project_schema(conn)
+
+    candidate_tables = ["demo_units", "units", "unidades", "price_lists", "prices", "unit_prices"]
+    for table_name in schema_map:
+        if "price" in table_name and table_name not in candidate_tables:
+            candidate_tables.append(table_name)
+
+    for table_name in candidate_tables:
+        if table_name not in schema_map:
+            continue
+        table_cols = schema_map[table_name]
+        price_col = _find_column(
+            table_cols,
+            exact=("price", "list_price", "price_amount", "precio", "amount", "value"),
+            contains=("price", "precio"),
+        )
+        if not price_col:
+            continue
+
+        rooms_col = _find_column(
+            table_cols,
+            exact=("rooms", "ambientes", "room_count", "num_rooms", "bedrooms"),
+            contains=("room", "ambiente", "bed"),
+        )
+        currency_col = _find_column(
+            table_cols,
+            exact=("currency", "moneda"),
+            contains=("currency", "moneda"),
+        )
+        unit_col = _find_column(
+            table_cols,
+            exact=("unit_code", "code", "name", "unidad", "numero"),
+            contains=("unit", "code", "name", "unidad", "numero"),
+        )
+        status_col = _find_column(
+            table_cols,
+            exact=("status", "availability_status", "estado", "state"),
+            contains=("status", "estado"),
+        )
+        scope = _project_scope_sql(schema_map, table_name, "u", clean_code)
+        if scope is None:
+            continue
+        join_sql, where_sql, params = scope
+
+        where_clauses = [where_sql]
+        query_params: list[Any] = list(params)
+        if rooms is not None:
+            if not rooms_col:
+                continue
+            where_clauses.append(f"u.{_q(rooms_col)}::text = %s")
+            query_params.append(str(int(rooms)))
+        if clean_currency and currency_col:
+            where_clauses.append(f"upper(u.{_q(currency_col)}::text) = upper(%s)")
+            query_params.append(clean_currency)
+
+        rooms_expr = f"u.{_q(rooms_col)}::text" if rooms_col else "null::text"
+        currency_expr = f"u.{_q(currency_col)}::text" if currency_col else "null::text"
+        unit_expr = f"u.{_q(unit_col)}::text" if unit_col else "null::text"
+        status_expr = f"u.{_q(status_col)}::text" if status_col else "null::text"
+
+        query = (
+            "select "
+            f"{rooms_expr} as rooms, "
+            f"u.{_q(price_col)} as price, "
+            f"{currency_expr} as currency, "
+            f"{status_expr} as status, "
+            f"{unit_expr} as unit_ref "
+            f"from {_q(table_name)} u {join_sql}"
+            f" where {' and '.join(where_clauses)}"
+            f" order by u.{_q(price_col)} asc nulls last"
+            " limit 200"
+        )
+        rows = _fetch_all_knowledge(conn, "get_prices_by_rooms", query, tuple(query_params))
+        if rows:
+            for row in rows:
+                row["_source_table"] = table_name
+            return rows
+    return []
+
+
+def get_availability_by_rooms(
+    conn: Any,
+    project_code: str,
+    rooms: int | None = None,
+) -> list[dict[str, Any]]:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return []
+
+    demo_rows = list_demo_units(conn, clean_code, rooms=rooms)
+    if demo_rows:
+        grouped: dict[str, int] = {}
+        for row in demo_rows:
+            status = str(row.get("availability_status") or "unknown")
+            grouped[status] = grouped.get(status, 0) + 1
+        output: list[dict[str, Any]] = []
+        for status, total in sorted(grouped.items(), key=lambda item: (-item[1], item[0])):
+            output.append(
+                {"status": status, "units_count": total, "_source_table": "demo_units"}
+            )
+        if output:
+            return output
+
+    schema_map = discover_project_schema(conn)
+    candidate_tables = ["demo_units", "availability", "units", "unidades"]
+    for table_name in schema_map:
+        if "avail" in table_name and table_name not in candidate_tables:
+            candidate_tables.append(table_name)
+
+    for table_name in candidate_tables:
+        if table_name not in schema_map:
+            continue
+        table_cols = schema_map[table_name]
+        scope = _project_scope_sql(schema_map, table_name, "u", clean_code)
+        if scope is None:
+            continue
+        join_sql, where_sql, params = scope
+
+        rooms_col = _find_column(
+            table_cols,
+            exact=("rooms", "ambientes", "room_count", "num_rooms", "bedrooms"),
+            contains=("room", "ambiente", "bed"),
+        )
+        status_col = _find_column(
+            table_cols,
+            exact=("status", "availability_status", "estado", "state"),
+            contains=("status", "estado", "dispon"),
+        )
+        available_col = _find_column(
+            table_cols,
+            exact=("is_available", "available"),
+            contains=("available",),
+        )
+        if not status_col and not available_col:
+            continue
+
+        where_clauses = [where_sql]
+        query_params: list[Any] = list(params)
+        if rooms is not None:
+            if not rooms_col:
+                continue
+            where_clauses.append(f"u.{_q(rooms_col)}::text = %s")
+            query_params.append(str(int(rooms)))
+
+        if status_col:
+            status_expr = f"coalesce(u.{_q(status_col)}::text, 'sin_estado')"
+        else:
+            status_expr = (
+                f"case when coalesce(u.{_q(available_col)}, false) "
+                "then 'disponible' else 'no_disponible' end"
+            )
+        query = (
+            "select "
+            f"{status_expr} as status, "
+            "count(*)::int as units_count "
+            f"from {_q(table_name)} u {join_sql}"
+            f" where {' and '.join(where_clauses)}"
+            " group by 1"
+            " order by 2 desc, 1 asc"
+        )
+        rows = _fetch_all_knowledge(conn, "get_availability_by_rooms", query, tuple(query_params))
+        if rows:
+            for row in rows:
+                row["_source_table"] = table_name
+            return rows
+    return []
+
+
+def get_financing_terms(conn: Any, project_code: str) -> dict[str, Any] | None:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return None
+
+    facts = get_demo_project_facts(conn, clean_code)
+    if isinstance(facts, dict):
+        financing_data = facts.get("financing_jsonb")
+        if financing_data not in (None, "", {}, []):
+            return {
+                "source_table": "demo_project_facts",
+                "fields": ["financing_jsonb"],
+                "items": [{"financing_data": financing_data}],
+            }
+
+    schema_map = discover_project_schema(conn)
+    projects_table = _find_table(schema_map, ("projects",))
+    if projects_table:
+        project_cols = schema_map.get(projects_table, [])
+        financing_col = _find_column(
+            project_cols,
+            exact=(
+                "financing_terms",
+                "financing",
+                "payment_terms",
+                "payment_plan",
+                "financiacion",
+                "cuotas",
+                "anticipo",
+            ),
+            contains=("financ", "cuota", "payment", "anticipo"),
+        )
+        if financing_col:
+            scope = _project_scope_sql(schema_map, projects_table, "p", clean_code)
+            if scope is not None:
+                join_sql, where_sql, params = scope
+                query = (
+                    f"select p.{_q(financing_col)} as financing_data "
+                    f"from {_q(projects_table)} p {join_sql} where {where_sql} limit 1"
+                )
+                row = _fetch_one_knowledge(conn, "get_financing_terms.projects", query, params)
+                if row and row.get("financing_data") not in (None, "", [], {}):
+                    return {
+                        "source_table": projects_table,
+                        "fields": [financing_col],
+                        "items": [row],
+                    }
+
+    candidates = ["payment_plans", "financing_terms", "financing", "payment_options"]
+    for table_name in list(schema_map):
+        if ("financ" in table_name or "payment" in table_name) and table_name not in candidates:
+            candidates.append(table_name)
+
+    for table_name in candidates:
+        if table_name not in schema_map:
+            continue
+        scope = _project_scope_sql(schema_map, table_name, "f", clean_code)
+        if scope is None:
+            continue
+        join_sql, where_sql, params = scope
+        query = (
+            f"select f.* from {_q(table_name)} f {join_sql}"
+            f" where {where_sql}"
+            " order by 1"
+            " limit 20"
+        )
+        rows = _fetch_all_knowledge(conn, "get_financing_terms.table", query, params)
+        if rows:
+            for row in rows:
+                row["_source_table"] = table_name
+            return {
+                "source_table": table_name,
+                "fields": list(schema_map.get(table_name, [])),
+                "items": rows,
+            }
+    return None
+
+
+def get_delivery_info(conn: Any, project_code: str) -> dict[str, Any] | None:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return None
+
+    facts = get_demo_project_facts(conn, clean_code)
+    if isinstance(facts, dict):
+        construction = facts.get("construction_jsonb")
+        if isinstance(construction, dict) and construction:
+            delivery_date = construction.get("delivery_estimated_at")
+            stage = construction.get("stage")
+            if delivery_date or stage:
+                return {
+                    "source_table": "demo_project_facts",
+                    "fields": ["construction_jsonb"],
+                    "items": [
+                        {
+                            "delivery_date": delivery_date,
+                            "status": stage,
+                            "construction": construction,
+                        }
+                    ],
+                }
+
+    schema_map = discover_project_schema(conn)
+    projects_table = _find_table(schema_map, ("projects",))
+    if projects_table:
+        project_cols = schema_map.get(projects_table, [])
+        delivery_col = _find_column(
+            project_cols,
+            exact=(
+                "delivery_date",
+                "estimated_delivery_date",
+                "entrega_estimada",
+                "handover_date",
+                "possession_date",
+                "delivery_at",
+            ),
+            contains=("delivery", "entrega", "handover", "posesion"),
+        )
+        status_col = _find_column(
+            project_cols,
+            exact=("status", "project_status", "estado"),
+            contains=("status", "estado"),
+        )
+        if delivery_col or status_col:
+            scope = _project_scope_sql(schema_map, projects_table, "p", clean_code)
+            if scope is not None:
+                join_sql, where_sql, params = scope
+                selects: list[str] = []
+                if delivery_col:
+                    selects.append(f"p.{_q(delivery_col)} as delivery_date")
+                if status_col:
+                    selects.append(f"p.{_q(status_col)} as status")
+                query = (
+                    f"select {', '.join(selects)} "
+                    f"from {_q(projects_table)} p {join_sql} "
+                    f"where {where_sql} limit 1"
+                )
+                row = _fetch_one_knowledge(conn, "get_delivery_info.projects", query, params)
+                if row and any(value not in (None, "", [], {}) for value in row.values()):
+                    return {
+                        "source_table": projects_table,
+                        "fields": [field for field in (delivery_col, status_col) if field],
+                        "items": [row],
+                    }
+
+    candidates = ["deliveries", "project_delivery", "delivery_schedule", "construction_stages"]
+    for table_name in list(schema_map):
+        if "delivery" in table_name and table_name not in candidates:
+            candidates.append(table_name)
+
+    for table_name in candidates:
+        if table_name not in schema_map:
+            continue
+        scope = _project_scope_sql(schema_map, table_name, "d", clean_code)
+        if scope is None:
+            continue
+        join_sql, where_sql, params = scope
+        query = (
+            f"select d.* from {_q(table_name)} d {join_sql}"
+            f" where {where_sql}"
+            " order by 1"
+            " limit 20"
+        )
+        rows = _fetch_all_knowledge(conn, "get_delivery_info.table", query, params)
+        if rows:
+            for row in rows:
+                row["_source_table"] = table_name
+            return {
+                "source_table": table_name,
+                "fields": list(schema_map.get(table_name, [])),
+                "items": rows,
+            }
+    return None

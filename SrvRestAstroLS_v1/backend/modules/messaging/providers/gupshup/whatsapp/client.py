@@ -68,7 +68,7 @@ class GupshupWhatsAppClient:
 
         async def _post(http_client: httpx.AsyncClient) -> dict[str, Any]:
             started_at = time.perf_counter()
-            response = await http_client.post(url, data=_encode_payload(payload), headers=headers, timeout=20.0)
+            response = await http_client.post(url, data=_encode_payload(payload), headers=headers, timeout=15.0)
             duration_ms = int((time.perf_counter() - started_at) * 1000)
             logger.info(
                 "GUPSHUP_HTTP_SEND sender=%s source=%s url=%s status=%s duration_ms=%s",

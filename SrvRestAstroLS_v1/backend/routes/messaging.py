@@ -672,6 +672,10 @@ class GupshupWhatsAppWebhookController(Controller):
             ticket_id = None
             sanitized_from = "".join(filter(str.isdigit, message.from_ or message.wa_id or ""))
             sanitized_to = "".join(filter(str.isdigit, message.to or ""))
+            fallback_line_digits = "".join(filter(str.isdigit, str(globalVar.GUPSHUP_SRC_NUMBER or "")))
+            inbound_line_digits = sanitized_to or fallback_line_digits
+            inbound_line_phone = f"+{inbound_line_digits}" if inbound_line_digits else None
+            inbound_line_key = f"gupshup:{inbound_line_digits}" if inbound_line_digits else "gupshup:unknown"
             sanitized_phone = f"+{sanitized_from}" if sanitized_from else ""
             message_text = str(message.text or "").strip()
 
@@ -692,6 +696,8 @@ class GupshupWhatsAppWebhookController(Controller):
                         "channel": "whatsapp",
                         "from": sanitized_phone,
                         "to": f"+{sanitized_to}" if sanitized_to else None,
+                        "inbound_line_phone": inbound_line_phone,
+                        "inbound_line_key": inbound_line_key,
                     },
                 )
                 orq_ms = int((time.perf_counter() - orq_started_at) * 1000)

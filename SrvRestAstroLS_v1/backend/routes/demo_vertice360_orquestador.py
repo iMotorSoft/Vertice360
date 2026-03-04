@@ -59,6 +59,28 @@ async def dashboard(cliente: str | None = None) -> dict[str, Any]:
         raise _map_service_error(exc) from exc
 
 
+@get("/knowledge/capabilities")
+async def knowledge_capabilities(request: Request, force_refresh: bool = False) -> dict[str, Any]:
+    try:
+        _validate_admin_reset_access(request)
+        return services.project_knowledge_capabilities(force_refresh=force_refresh)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise _map_service_error(exc) from exc
+
+
+@get("/knowledge/debug/project")
+async def knowledge_debug_project(request: Request, code: str) -> dict[str, Any]:
+    try:
+        _validate_admin_reset_access(request)
+        return services.project_knowledge_debug_project(code=code)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise _map_service_error(exc) from exc
+
+
 @get("/ticket/{ticket_id:str}")
 async def ticket_detail(ticket_id: str) -> dict[str, Any]:
     try:
@@ -94,7 +116,7 @@ async def admin_reset_phone(request: Request, data: AdminResetPhoneRequest) -> d
 @post("/visit/propose", status_code=200)
 async def visit_propose(data: VisitProposeRequest) -> dict[str, Any]:
     try:
-        return services.propose_visit(
+        return await services.propose_visit(
             ticket_id=data.ticket_id,
             advisor_name=data.advisor_name,
             option1=data.option1,
@@ -137,8 +159,9 @@ async def visit_reschedule(data: VisitRescheduleRequest) -> dict[str, Any]:
 @post("/supervisor/send", status_code=200)
 async def supervisor_send(data: SupervisorSendRequest) -> dict[str, Any]:
     try:
-        return services.supervisor_send(
+        return await services.supervisor_send(
             ticket_id=data.ticket_id,
+            lead_phone=data.lead_phone,
             target=data.target,
             text=data.text,
         )
@@ -151,6 +174,8 @@ router = Router(
     route_handlers=[
         bootstrap,
         dashboard,
+        knowledge_capabilities,
+        knowledge_debug_project,
         ticket_detail,
         ingest_message,
         admin_reset_phone,
