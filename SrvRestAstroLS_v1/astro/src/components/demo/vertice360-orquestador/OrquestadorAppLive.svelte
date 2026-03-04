@@ -1,6 +1,7 @@
 <script>
   import { onMount } from "svelte";
-  import { URL_SVG_XMLNS, URL_WA_API, URL_WA_ME } from "../../global.js";
+  import { createSseManager } from "../../../lib/shared/sse.js";
+  import { URL_SSE, URL_SVG_XMLNS, URL_WA_API, URL_WA_ME } from "../../global.js";
 
   import LeadDetailModal from "./LeadDetailModal.svelte";
   import VisitProposalModal from "./VisitProposalModal.svelte";
@@ -63,6 +64,10 @@
 
   let bootstrapLoaded = $state(false);
   const WHATSAPP_PHONE_LOAD_ERROR = "No se pudo cargar el número de WhatsApp demo";
+  const SSE_REFRESH_EVENTS = new Set(["messaging.inbound", "messaging.inbound.raw", "messaging.outbound"]);
+  let sseConnected = $state(false);
+  let pendingDashboardRefresh = false;
+  let refreshTimer = null;
 
   const normalizeClienteDisplay = (value) => {
     const compact = String(value || "").replace(/[\s-]+/g, "");
@@ -76,6 +81,27 @@
 
   const normalizePhoneDigits = (value) => String(value || "").replace(/\D+/g, "");
   const hasDemoWhatsAppPhone = () => Boolean(normalizePhoneDigits(demoWhatsAppPhone));
+
+  const shouldRefreshFromSseEvent = (evt) => {
+    if (!evt || !SSE_REFRESH_EVENTS.has(String(evt.name || ""))) return false;
+    return hasCliente();
+  };
+
+  const scheduleDashboardRefresh = () => {
+    if (!hasCliente()) return;
+    if (isLoadingDashboard) {
+      pendingDashboardRefresh = true;
+      return;
+    }
+
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+    }
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      void loadDashboard({ silent: true });
+    }, 220);
+  };
 
   const formatDateTime = (value) => {
     if (!value) return "--";
@@ -273,7 +299,7 @@
       id: ticketId || `ticket-${Math.random().toString(36).slice(2)}`,
       ticketId,
       leadId: row?.lead_id ? String(row.lead_id) : "",
-      proyecto: row?.project_code || row?.project_name || "Sin proyecto",
+      proyecto: row?.project_label || row?.project_code || row?.project_name || "General",
       cliente: row?.phone_e164 || "--",
       estado: row?.stage || "Nuevo",
       ultimoMensaje: row?.last_message_snippet || "Sin mensajes",
@@ -486,6 +512,10 @@
       }
     } finally {
       isLoadingDashboard = false;
+      if (pendingDashboardRefresh) {
+        pendingDashboardRefresh = false;
+        void loadDashboard({ silent: true });
+      }
     }
   };
 
@@ -744,6 +774,18 @@
   };
 
   onMount(() => {
+    const sseManager = createSseManager(URL_SSE, {
+      eventTypes: Array.from(SSE_REFRESH_EVENTS),
+      onStatus: (connected) => {
+        sseConnected = Boolean(connected);
+      },
+      onEvent: (evt) => {
+        if (!shouldRefreshFromSseEvent(evt)) return;
+        scheduleDashboardRefresh();
+      },
+    });
+    sseManager.connect();
+
     const fromUrl =
       typeof window !== "undefined"
         ? String(new URLSearchParams(window.location.search).get("cliente") || "").trim()
@@ -778,6 +820,11 @@
     })();
 
     return () => {
+      sseManager.disconnect();
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+        refreshTimer = null;
+      }
       window.removeEventListener("orquestador-live:cliente", onClienteEvent);
       window.removeEventListener("orquestador-live:reset-ui", onResetUi);
     };
