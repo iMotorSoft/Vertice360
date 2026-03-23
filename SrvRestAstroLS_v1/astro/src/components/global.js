@@ -8,7 +8,7 @@ export const SITE_DESCRIPTION =
 const URL_REST_DEV = 'http://localhost:7062';
 const URL_REST_PRO = 'https://demo.vertice360.imotorsoft.com';
 
-export const URL_REST = URL_REST_DEV; // cambialo a URL_REST_PRO para apuntar al backend remoto
+export const URL_REST = URL_REST_PRO; // cambialo a URL_REST_PRO para apuntar al backend remoto
 
 // Source of truth for all REST clients in Astro demos.
 export const getRestBaseUrl = () => String(URL_REST || '').replace(/\/+$/, '');

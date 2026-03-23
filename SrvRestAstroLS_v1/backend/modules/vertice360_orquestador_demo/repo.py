@@ -1317,6 +1317,8 @@ def get_demo_project_facts(conn: Any, project_code: str) -> dict[str, Any] | Non
     clean_code = str(project_code or "").strip()
     if not clean_code:
         return None
+    if not hasattr(conn, "execute"):
+        return None
     schema_map = discover_project_schema(conn)
     if not _table_exists(schema_map, "demo_project_facts"):
         return None
@@ -1333,6 +1335,106 @@ def get_demo_project_facts(conn: Any, project_code: str) -> dict[str, Any] | Non
     )
     if row:
         row["_source_table"] = "demo_project_facts"
+    return row
+
+
+def get_demo_project_bundle(conn: Any, project_code: str) -> dict[str, Any] | None:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return None
+    if not hasattr(conn, "execute"):
+        return None
+    schema_map = discover_project_schema(conn)
+    if not _table_exists(schema_map, "demo_project_bundles"):
+        return None
+    row = _fetch_one_knowledge(
+        conn,
+        "get_demo_project_bundle",
+        """
+        select *
+        from demo_project_bundles
+        where upper(project_code) = upper(%s)
+        limit 1
+        """,
+        (clean_code,),
+    )
+    if row:
+        row["_source_table"] = "demo_project_bundles"
+    return row
+
+
+def get_project_profile(conn: Any, project_code: str) -> dict[str, Any] | None:
+    clean_code = str(project_code or "").strip()
+    if not clean_code or not hasattr(conn, "execute"):
+        return None
+    schema_map = discover_project_schema(conn)
+    if not _table_exists(schema_map, "demo_project_profile"):
+        return None
+    row = _fetch_one_knowledge(
+        conn,
+        "get_project_profile",
+        """
+        select *
+        from demo_project_profile
+        where upper(project_code) = upper(%s)
+        limit 1
+        """,
+        (clean_code,),
+    )
+    if row:
+        row["_source_table"] = "demo_project_profile"
+    return row
+
+
+def get_unit_profiles_for_project(conn: Any, project_code: str) -> list[dict[str, Any]]:
+    clean_code = str(project_code or "").strip()
+    if not clean_code or not hasattr(conn, "execute"):
+        return []
+    schema_map = discover_project_schema(conn)
+    if not _table_exists(schema_map, "demo_unit_profile"):
+        return []
+    rows = _fetch_all_knowledge(
+        conn,
+        "get_unit_profiles_for_project",
+        """
+        select *
+        from demo_unit_profile
+        where upper(project_code) = upper(%s)
+        order by unit_id asc
+        """,
+        (clean_code,),
+    )
+    for row in rows:
+        row["_source_table"] = "demo_unit_profile"
+    return rows
+
+
+def get_unit_profile_by_unit_id(
+    conn: Any,
+    project_code: str,
+    unit_id: str,
+) -> dict[str, Any] | None:
+    clean_code = str(project_code or "").strip()
+    clean_unit_id = str(unit_id or "").strip()
+    if not clean_code or not clean_unit_id or not hasattr(conn, "execute"):
+        return None
+    schema_map = discover_project_schema(conn)
+    if not _table_exists(schema_map, "demo_unit_profile"):
+        return None
+    row = _fetch_one_knowledge(
+        conn,
+        "get_unit_profile_by_unit_id",
+        """
+        select *
+        from demo_unit_profile
+        where upper(project_code) = upper(%s)
+          and unit_id = %s
+        limit 1
+        """,
+        (clean_code, clean_unit_id),
+    )
+    if row:
+        row["_source_table"] = "demo_unit_profile"
     return row
 
 
@@ -1389,6 +1491,818 @@ def list_demo_units(
     for row in rows:
         row["_source_table"] = "demo_units"
     return rows
+
+
+def list_all_demo_units(
+    conn: Any,
+    *,
+    rooms: int | None = None,
+    currency: str | None = None,
+) -> list[dict[str, Any]]:
+    project_rows = list_projects(conn)
+    project_names = {
+        str(row.get("code") or "").strip().upper(): str(row.get("name") or row.get("code") or "").strip()
+        for row in project_rows
+        if str(row.get("code") or "").strip()
+    }
+    units: list[dict[str, Any]] = []
+    for project_code in project_names:
+        rows = list_demo_units(conn, project_code, rooms=rooms, currency=currency)
+        for row in rows:
+            unit = dict(row)
+            unit["project_code"] = str(unit.get("project_code") or project_code).strip().upper()
+            unit["project_name"] = project_names.get(unit["project_code"], unit["project_code"])
+            units.append(unit)
+    return units
+
+
+def get_project_surface_totals_from_demo_units(conn: Any) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = {}
+    for row in list_all_demo_units(conn, rooms=None, currency=None):
+        project_code = str(row.get("project_code") or "").strip().upper()
+        if not project_code:
+            continue
+        surface_total = _coerce_float(row.get("surface_total_m2"))
+        if surface_total is None:
+            continue
+        project_row = grouped.setdefault(
+            project_code,
+            {
+                "project_code": project_code,
+                "project_name": str(row.get("project_name") or project_code).strip(),
+                "surface_total_m2_sum": 0.0,
+                "units_with_surface_count": 0,
+                "_source_table": "demo_units",
+            },
+        )
+        project_row["surface_total_m2_sum"] = float(project_row.get("surface_total_m2_sum") or 0.0) + float(surface_total)
+        project_row["units_with_surface_count"] = int(project_row.get("units_with_surface_count") or 0) + 1
+    return sorted(
+        grouped.values(),
+        key=lambda row: (
+            -float(row.get("surface_total_m2_sum") or 0.0),
+            str(row.get("project_name") or row.get("project_code") or ""),
+        ),
+    )
+
+
+def list_units_by_rooms(
+    conn: Any,
+    *,
+    project_code: str | None = None,
+    rooms_count: int | None = None,
+    rooms_label: str | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    target_rooms = rooms_count
+    if target_rooms is None and rooms_label is not None:
+        match = re.search(r"\b([1-4])\b", str(rooms_label))
+        if match:
+            target_rooms = int(match.group(1))
+        elif re.search(r"\bmono(?:ambiente)?s?\b", str(rooms_label), re.IGNORECASE):
+            target_rooms = 1
+    if target_rooms is None:
+        return []
+
+    rows = get_units_with_filters(
+        conn,
+        project_code=str(project_code).strip().upper() or None if project_code else None,
+        rooms=int(target_rooms),
+        availability="available",
+    )
+    project_name = ""
+    if project_code:
+        project_row = get_project_by_code(conn, str(project_code).strip().upper())
+        project_name = str((project_row or {}).get("name") or "").strip()
+
+    normalized: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        item["project_code"] = str(item.get("project_code") or project_code or "").strip().upper()
+        if not item.get("project_name"):
+            item["project_name"] = project_name or item["project_code"]
+        normalized.append(item)
+
+    normalized.sort(
+        key=lambda row: (
+            str(row.get("project_name") or row.get("project_code") or "").strip(),
+            _coerce_float(row.get("list_price")) if _coerce_float(row.get("list_price")) is not None else float("inf"),
+            str(row.get("unit_code") or row.get("unit_id") or "").strip().upper(),
+        )
+    )
+    if limit is not None and int(limit) >= 0:
+        return normalized[: int(limit)]
+    return normalized
+
+
+def count_units_by_rooms(
+    conn: Any,
+    *,
+    project_code: str | None = None,
+    rooms_count: int | None = None,
+    rooms_label: str | None = None,
+) -> int:
+    return len(
+        list_units_by_rooms(
+            conn,
+            project_code=project_code,
+            rooms_count=rooms_count,
+            rooms_label=rooms_label,
+            limit=None,
+        )
+    )
+
+
+def get_global_units_by_rooms(
+    conn: Any,
+    *,
+    rooms_count: int | None = None,
+    rooms_label: str | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    return list_units_by_rooms(
+        conn,
+        project_code=None,
+        rooms_count=rooms_count,
+        rooms_label=rooms_label,
+        limit=limit,
+    )
+
+
+def list_units_matching_active_filter(
+    conn: Any,
+    *,
+    filter_type: str,
+    filter_payload: dict[str, Any] | None = None,
+    scope: str = "global",
+    project_code: str | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    clean_type = str(filter_type or "").strip().lower()
+    payload = dict(filter_payload or {})
+    clean_scope = str(scope or "").strip().lower() or "global"
+    scoped_project_code = str(project_code or "").strip().upper() or None
+
+    rooms_count: int | None = None
+    try:
+        rooms_count = int(payload.get("rooms_count")) if payload.get("rooms_count") is not None else None
+    except Exception:  # noqa: BLE001
+        rooms_count = None
+
+    feature_key = str(payload.get("feature_key") or "").strip().lower() or None
+    min_surface_total_m2 = _coerce_float(payload.get("min_surface_total_m2"))
+    max_surface_total_m2 = _coerce_float(payload.get("max_surface_total_m2"))
+    facets_applied = [
+        str(item or "").strip().lower()
+        for item in (payload.get("facets_applied") or [])
+        if str(item or "").strip()
+    ]
+
+    if clean_scope in {"global", "transversal"}:
+        base_rows = get_units_global_filtered(
+            conn,
+            min_surface_total_m2=min_surface_total_m2 if clean_type == "surface" else None,
+            max_surface_total_m2=max_surface_total_m2 if clean_type == "surface" else None,
+            rooms_count=rooms_count,
+            feature_key=feature_key if clean_type == "feature" else None,
+            availability="available",
+        )
+    else:
+        base_rows = get_units_with_filters(
+            conn,
+            project_code=scoped_project_code,
+            rooms=rooms_count,
+            feature_key=feature_key if clean_type == "feature" else None,
+            min_surface_total_m2=min_surface_total_m2 if clean_type == "surface" else None,
+            max_surface_total_m2=max_surface_total_m2 if clean_type == "surface" else None,
+            availability="available",
+        )
+
+    filtered: list[dict[str, Any]] = []
+    for row in base_rows:
+        if facets_applied and not all(_unit_matches_feature_profile(row, facet) for facet in facets_applied):
+            continue
+        filtered.append(dict(row))
+
+    filtered.sort(
+        key=lambda row: (
+            str(row.get("project_name") or row.get("project_code") or "").strip(),
+            _coerce_float(row.get("list_price")) if _coerce_float(row.get("list_price")) is not None else float("inf"),
+            str(row.get("unit_code") or row.get("unit_id") or "").strip().upper(),
+        )
+    )
+    if limit is not None and int(limit) >= 0:
+        return filtered[: int(limit)]
+    return filtered
+
+
+def list_projects_matching_active_filter(
+    conn: Any,
+    *,
+    filter_type: str,
+    filter_payload: dict[str, Any] | None = None,
+    scope: str = "global",
+    project_code: str | None = None,
+) -> list[dict[str, Any]]:
+    project_rows = list_projects(conn)
+    project_names = {
+        str(row.get("code") or "").strip().upper(): str(row.get("name") or row.get("code") or "").strip()
+        for row in project_rows
+        if str(row.get("code") or "").strip()
+    }
+    rows = list_units_matching_active_filter(
+        conn,
+        filter_type=filter_type,
+        filter_payload=filter_payload,
+        scope=scope,
+        project_code=project_code,
+        limit=None,
+    )
+
+    grouped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        code = str(row.get("project_code") or project_code or "").strip().upper()
+        if not code:
+            continue
+        bucket = grouped.setdefault(
+            code,
+            {
+                "project_code": code,
+                "project_name": str(row.get("project_name") or project_names.get(code, code)).strip(),
+                "units_count": 0,
+                "_source_tables": [],
+            },
+        )
+        bucket["units_count"] = int(bucket.get("units_count") or 0) + 1
+        for source_key in ("_source_table", "_profile_source_table"):
+            source = str(row.get(source_key) or "").strip()
+            if source and source not in bucket["_source_tables"]:
+                bucket["_source_tables"].append(source)
+
+    return sorted(grouped.values(), key=lambda row: (str(row.get("project_name") or "").strip(), str(row.get("project_code") or "").strip()))
+
+
+def _as_text_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        result: list[str] = []
+        for item in value:
+            clean = str(item or "").strip()
+            if clean and clean not in result:
+                result.append(clean)
+        return result
+    return []
+
+
+def _as_json_object(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _unit_profile_index(
+    conn: Any,
+    *,
+    project_code: str | None = None,
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    profiles: list[dict[str, Any]] = []
+    if project_code:
+        profiles = get_unit_profiles_for_project(conn, project_code)
+    else:
+        for row in list_projects(conn):
+            code = str(row.get("code") or "").strip()
+            if not code:
+                continue
+            profiles.extend(get_unit_profiles_for_project(conn, code))
+    indexed: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for row in profiles:
+        key = (
+            str(row.get("workspace_id") or "").strip(),
+            str(row.get("project_code") or "").strip().upper(),
+            str(row.get("unit_id") or "").strip(),
+        )
+        indexed[key] = row
+    return indexed
+
+
+def _unit_feature_values(unit_row: dict[str, Any]) -> list[str]:
+    values: list[str] = []
+    for item in _as_text_list(unit_row.get("features_jsonb")):
+        values.append(str(item).strip().lower())
+    return values
+
+
+def _unit_matches_feature_profile(unit_row: dict[str, Any], feature_key: str) -> bool:
+    clean_feature = str(feature_key or "").strip().lower()
+    if not clean_feature:
+        return False
+
+    features = _unit_feature_values(unit_row)
+    recommended_profiles = [value.lower() for value in _as_text_list(unit_row.get("recommended_profiles_jsonb"))]
+    commercial_features = {
+        str(key or "").strip().lower(): value
+        for key, value in _as_json_object(unit_row.get("commercial_features_jsonb")).items()
+    }
+
+    def _raw_has(*aliases: str) -> bool:
+        for alias in aliases:
+            normalized = str(alias or "").strip().lower()
+            if any(normalized == value or normalized in value or value in normalized for value in features):
+                return True
+        return False
+
+    if clean_feature == "balcon":
+        return bool(
+            commercial_features.get("balcony")
+            or _raw_has("balcon", "balcon terraza", "balcón", "balcón terraza", "terraza")
+        )
+    if clean_feature == "cochera":
+        return unit_row.get("has_garage") is True or _raw_has("cochera", "garage", "parking")
+    if clean_feature == "jardin":
+        return bool(unit_row.get("has_garden") is True or commercial_features.get("garden") or _raw_has("jardin", "jardín", "garden"))
+    if clean_feature == "patio":
+        return unit_row.get("has_patio") is True or _raw_has("patio")
+    if clean_feature == "baulera":
+        return unit_row.get("has_storage") is True or _raw_has("baulera", "storage")
+    if clean_feature == "mascotas":
+        return bool(unit_row.get("pets_allowed") is True or "pets" in recommended_profiles or _raw_has("mascotas", "pet friendly", "pets allowed"))
+    if clean_feature == "en_suite":
+        suite_count = commercial_features.get("suite_bedrooms")
+        return bool((isinstance(suite_count, int) and suite_count > 0) or _raw_has("suite", "en suite"))
+    if clean_feature == "walk_in_closet":
+        return _raw_has("walk in closet", "vestidor")
+    if clean_feature == "lavadero":
+        return _raw_has("lavadero", "laundry")
+    if clean_feature == "parrilla":
+        return _raw_has("parrilla")
+    return _raw_has(clean_feature)
+
+
+def _coerce_float(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(str(value).strip().replace(",", "."))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def get_units_with_filters(
+    conn: Any,
+    *,
+    project_code: str | None = None,
+    rooms: int | None = None,
+    currency: str | None = None,
+    unit_id: str | None = None,
+    unit_code: str | None = None,
+    feature_key: str | None = None,
+    children_suitable: bool | None = None,
+    pets_allowed: bool | None = None,
+    has_garden: bool | None = None,
+    has_patio: bool | None = None,
+    has_garage: bool | None = None,
+    has_storage: bool | None = None,
+    natural_light: str | None = None,
+    balcony_protection: str | None = None,
+    recommended_profile: str | None = None,
+    min_surface_total_m2: float | None = None,
+    max_surface_total_m2: float | None = None,
+    availability: str | None = None,
+) -> list[dict[str, Any]]:
+    base_rows = (
+        list_demo_units(conn, str(project_code), rooms=rooms, currency=currency)
+        if project_code
+        else list_all_demo_units(conn, rooms=rooms, currency=currency)
+    )
+    profile_map = _unit_profile_index(conn, project_code=project_code)
+
+    clean_unit_id = str(unit_id or "").strip()
+    clean_unit_code = str(unit_code or "").strip().upper()
+    clean_natural_light = str(natural_light or "").strip().lower()
+    clean_balcony = str(balcony_protection or "").strip().lower()
+    clean_recommended = str(recommended_profile or "").strip().lower()
+    clean_availability = str(availability or "").strip().lower()
+    filtered: list[dict[str, Any]] = []
+
+    def _matches_bool(value: Any, expected: bool | None) -> bool:
+        if expected is None:
+            return True
+        return isinstance(value, bool) and value is expected
+
+    for row in base_rows:
+        merged = dict(row)
+        key = (
+            str(row.get("workspace_id") or "").strip(),
+            str(row.get("project_code") or "").strip().upper(),
+            str(row.get("unit_id") or "").strip(),
+        )
+        profile = profile_map.get(key)
+        if profile:
+            merged.update(profile)
+            merged["_profile_source_table"] = "demo_unit_profile"
+        if clean_unit_id and str(merged.get("unit_id") or "").strip() != clean_unit_id:
+            continue
+        if clean_unit_code and str(merged.get("unit_code") or "").strip().upper() != clean_unit_code:
+            continue
+        if feature_key and not _unit_matches_feature_profile(merged, feature_key):
+            continue
+        if not _matches_bool(merged.get("children_suitable"), children_suitable):
+            continue
+        if not _matches_bool(merged.get("pets_allowed"), pets_allowed):
+            continue
+        if not _matches_bool(merged.get("has_garden"), has_garden):
+            continue
+        if not _matches_bool(merged.get("has_patio"), has_patio):
+            continue
+        if not _matches_bool(merged.get("has_garage"), has_garage):
+            continue
+        if not _matches_bool(merged.get("has_storage"), has_storage):
+            continue
+        if clean_natural_light and str(merged.get("natural_light") or "").strip().lower() != clean_natural_light:
+            continue
+        if clean_balcony and str(merged.get("balcony_protection") or "").strip().lower() != clean_balcony:
+            continue
+        if clean_recommended:
+            recommended = [value.lower() for value in _as_text_list(merged.get("recommended_profiles_jsonb"))]
+            if clean_recommended not in recommended:
+                continue
+        surface_total = _coerce_float(merged.get("surface_total_m2"))
+        if min_surface_total_m2 is not None:
+            if surface_total is None or surface_total < float(min_surface_total_m2):
+                continue
+        if max_surface_total_m2 is not None:
+            if surface_total is None or surface_total > float(max_surface_total_m2):
+                continue
+        if clean_availability:
+            current_status = _normalize_inventory_status(merged.get("availability_status"))
+            if current_status != _normalize_inventory_status(clean_availability):
+                continue
+        filtered.append(merged)
+    return filtered
+
+
+def get_units_global_filtered(
+    conn: Any,
+    *,
+    min_surface_total_m2: float | None = None,
+    max_surface_total_m2: float | None = None,
+    rooms_count: int | None = None,
+    feature_key: str | None = None,
+    has_garden: bool | None = None,
+    has_patio: bool | None = None,
+    has_garage: bool | None = None,
+    has_storage: bool | None = None,
+    availability: str | None = None,
+) -> list[dict[str, Any]]:
+    return get_units_with_filters(
+        conn,
+        project_code=None,
+        rooms=rooms_count,
+        feature_key=feature_key,
+        has_garden=has_garden,
+        has_patio=has_patio,
+        has_garage=has_garage,
+        has_storage=has_storage,
+        min_surface_total_m2=min_surface_total_m2,
+        max_surface_total_m2=max_surface_total_m2,
+        availability=availability,
+    )
+
+
+def _unit_summary_brief(unit_row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "unit_id": unit_row.get("unit_id"),
+        "unit_code": unit_row.get("unit_code"),
+        "rooms_label": unit_row.get("rooms_label"),
+        "children_suitable": unit_row.get("children_suitable"),
+        "pets_allowed": unit_row.get("pets_allowed"),
+        "has_garden": unit_row.get("has_garden"),
+        "has_patio": unit_row.get("has_patio"),
+        "has_garage": unit_row.get("has_garage"),
+        "has_storage": unit_row.get("has_storage"),
+        "natural_light": unit_row.get("natural_light"),
+        "orientation": unit_row.get("orientation"),
+        "exposure": unit_row.get("exposure"),
+        "sun_morning": unit_row.get("sun_morning"),
+        "sun_afternoon": unit_row.get("sun_afternoon"),
+        "cross_ventilation": unit_row.get("cross_ventilation"),
+        "balcony_protection": unit_row.get("balcony_protection"),
+    }
+
+
+def get_project_inventory_summary(conn: Any, project_code: str) -> dict[str, Any]:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return {}
+
+    project_profile = get_project_profile(conn, clean_code)
+    if project_profile:
+        breakdown = _as_json_object(project_profile.get("raw_status_breakdown_jsonb"))
+        return {
+            "project_code": clean_code.upper(),
+            "units_total": _coerce_int(project_profile.get("units_total")),
+            "available_units": _coerce_int(project_profile.get("available_units")),
+            "reserved_units": _coerce_int(project_profile.get("reserved_units")),
+            "unavailable_units": _coerce_int(project_profile.get("unavailable_units")),
+            "inventory_is_complete": bool(project_profile.get("inventory_is_complete")),
+            "inventory_scope_type": project_profile.get("inventory_scope_type"),
+            "inventory_scope_label": project_profile.get("inventory_scope_label"),
+            "inventory_as_of": project_profile.get("inventory_as_of"),
+            "raw_status_breakdown_jsonb": breakdown,
+            "_source_table": "demo_project_profile",
+        }
+
+    total_units = get_total_units_for_project(conn, clean_code)
+    breakdown = get_unit_status_breakdown(conn, clean_code)
+    available_units = get_available_units_count(conn, clean_code)
+    return {
+        "project_code": clean_code.upper(),
+        "units_total": total_units,
+        "available_units": available_units,
+        "reserved_units": _coerce_int(breakdown.get("reserved")),
+        "unavailable_units": _coerce_int(breakdown.get("unavailable")),
+        "inventory_is_complete": is_full_inventory_known(conn, clean_code),
+        "inventory_scope_type": None,
+        "inventory_scope_label": None,
+        "inventory_as_of": None,
+        "raw_status_breakdown_jsonb": breakdown,
+        "_source_table": "demo_units" if breakdown else "",
+    }
+
+
+def get_project_recommended_profiles(conn: Any, project_code: str) -> list[str]:
+    project_profile = get_project_profile(conn, project_code)
+    return _as_text_list((project_profile or {}).get("recommended_profiles_jsonb"))
+
+
+def get_children_suitability_summary(conn: Any, project_code: str) -> dict[str, Any]:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return {}
+    project_profile = get_project_profile(conn, clean_code) or {}
+    rows = get_units_with_filters(conn, project_code=clean_code)
+    known_units = [row for row in rows if isinstance(row.get("children_suitable"), bool)]
+    suitable_units = [row for row in known_units if row.get("children_suitable") is True]
+    family_units = [
+        row for row in rows if "family" in [value.lower() for value in _as_text_list(row.get("recommended_profiles_jsonb"))]
+    ]
+    warnings = _as_text_list(project_profile.get("child_safety_warnings_jsonb"))
+    for row in rows:
+        for warning in _as_text_list(row.get("child_safety_warnings_jsonb")):
+            if warning not in warnings:
+                warnings.append(warning)
+    return {
+        "project_code": clean_code.upper(),
+        "project_children_suitable": project_profile.get("children_suitable"),
+        "project_recommended_profiles": _as_text_list(project_profile.get("recommended_profiles_jsonb")),
+        "warnings": warnings,
+        "known_units_count": len(known_units),
+        "suitable_units_count": len(suitable_units),
+        "family_recommended_units_count": len(family_units),
+        "suitable_units": [_unit_summary_brief(row) for row in suitable_units[:5]],
+        "family_units": [_unit_summary_brief(row) for row in family_units[:5]],
+        "_source_tables": _dedupe_sources(["demo_project_profile", "demo_unit_profile"]),
+    }
+
+
+def get_pets_suitability_summary(conn: Any, project_code: str) -> dict[str, Any]:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return {}
+    project_profile = get_project_profile(conn, clean_code) or {}
+    rows = get_units_with_filters(conn, project_code=clean_code)
+    known_units = [row for row in rows if isinstance(row.get("pets_allowed"), bool)]
+    allowed_units = [row for row in known_units if row.get("pets_allowed") is True]
+    recommended_units = [
+        row
+        for row in rows
+        if "pets" in [value.lower() for value in _as_text_list(row.get("recommended_profiles_jsonb"))]
+        or row.get("has_garden") is True
+        or row.get("has_patio") is True
+    ]
+    warnings = _as_text_list(project_profile.get("usage_warnings_jsonb"))
+    restrictions = str(project_profile.get("pets_restrictions_text") or "").strip() or None
+    return {
+        "project_code": clean_code.upper(),
+        "project_pets_allowed": project_profile.get("pets_allowed"),
+        "project_pets_restrictions_text": restrictions,
+        "project_recommended_profiles": _as_text_list(project_profile.get("recommended_profiles_jsonb")),
+        "known_units_count": len(known_units),
+        "pets_allowed_units_count": len(allowed_units),
+        "pets_recommended_units_count": len(recommended_units),
+        "garden_units_count": sum(1 for row in rows if row.get("has_garden") is True),
+        "patio_units_count": sum(1 for row in rows if row.get("has_patio") is True),
+        "allowed_units": [_unit_summary_brief(row) for row in allowed_units[:5]],
+        "recommended_units": [_unit_summary_brief(row) for row in recommended_units[:5]],
+        "warnings": warnings,
+        "_source_tables": _dedupe_sources(["demo_project_profile", "demo_unit_profile"]),
+    }
+
+
+def get_light_orientation_summary(
+    conn: Any,
+    *,
+    project_code: str | None = None,
+    unit_id: str | None = None,
+) -> dict[str, Any]:
+    clean_code = str(project_code or "").strip()
+    clean_unit_id = str(unit_id or "").strip()
+    if clean_unit_id and clean_code:
+        unit_rows = get_units_with_filters(conn, project_code=clean_code, unit_id=clean_unit_id)
+        if not unit_rows:
+            return {}
+        row = unit_rows[0]
+        return {
+            "project_code": clean_code.upper(),
+            "unit": _unit_summary_brief(row),
+            "thermal_comfort_notes": row.get("thermal_comfort_notes"),
+            "_source_tables": _dedupe_sources(["demo_unit_profile", "demo_units"]),
+        }
+
+    if not clean_code:
+        return {}
+
+    rows = get_units_with_filters(conn, project_code=clean_code)
+    return {
+        "project_code": clean_code.upper(),
+        "units_count": len(rows),
+        "orientation_known_units": [_unit_summary_brief(row) for row in rows if str(row.get("orientation") or "").strip()][:5],
+        "exposure_known_units": [_unit_summary_brief(row) for row in rows if str(row.get("exposure") or "").strip()][:5],
+        "high_light_units": [_unit_summary_brief(row) for row in rows if str(row.get("natural_light") or "").strip().lower() == "high"][:5],
+        "medium_light_units": [_unit_summary_brief(row) for row in rows if str(row.get("natural_light") or "").strip().lower() == "medium"][:5],
+        "low_light_units": [_unit_summary_brief(row) for row in rows if str(row.get("natural_light") or "").strip().lower() == "low"][:5],
+        "sun_morning_units": [_unit_summary_brief(row) for row in rows if row.get("sun_morning") is True][:5],
+        "sun_afternoon_units": [_unit_summary_brief(row) for row in rows if row.get("sun_afternoon") is True][:5],
+        "cross_ventilation_units": [_unit_summary_brief(row) for row in rows if row.get("cross_ventilation") is True][:5],
+        "_source_tables": _dedupe_sources(["demo_unit_profile", "demo_units"]),
+    }
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _nested_value(payload: dict[str, Any], *path: str) -> Any:
+    current: Any = payload
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _coerce_int(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = int(str(value).strip())
+    except Exception:  # noqa: BLE001
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _extract_units_total_from_payload(payload: dict[str, Any] | None) -> int | None:
+    data = payload if isinstance(payload, dict) else {}
+    candidates = (
+        _nested_value(data, "building", "structure", "units_total"),
+        _nested_value(data, "condominium", "structure", "units_total"),
+        _nested_value(data, "structure", "units_total"),
+        data.get("units_total"),
+    )
+    for candidate in candidates:
+        total = _coerce_int(candidate)
+        if total is not None:
+            return total
+    return None
+
+
+def _normalize_inventory_status(value: Any) -> str:
+    clean = str(value or "").strip().lower().replace(" ", "_")
+    if not clean:
+        return "unknown"
+    if clean in {"available", "disponible", "activo", "active"}:
+        return "available"
+    if clean in {"reserved", "reservada", "reservado"}:
+        return "reserved"
+    if clean in {
+        "sold",
+        "vendida",
+        "vendido",
+        "unavailable",
+        "no_disponible",
+        "occupied",
+        "ocupada",
+        "ocupado",
+        "inactive",
+        "inactivo",
+        "inactiva",
+    }:
+        return "unavailable"
+    if clean.startswith("reserv"):
+        return "reserved"
+    if clean.startswith("dispon") or clean.startswith("active") or clean.startswith("activ"):
+        return "available"
+    if (
+        clean.startswith("ocup")
+        or clean.startswith("vend")
+        or clean.startswith("no_dispon")
+        or clean.startswith("unavail")
+    ):
+        return "unavailable"
+    return clean
+
+
+def get_total_units_for_project(conn: Any, project_code: str) -> int | None:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return None
+
+    project_profile = get_project_profile(conn, clean_code)
+    profile_total = _coerce_int((project_profile or {}).get("units_total"))
+    if profile_total is not None:
+        return profile_total
+
+    facts = get_demo_project_facts(conn, clean_code)
+    facts_total = _extract_units_total_from_payload(facts)
+    if facts_total is not None:
+        return facts_total
+
+    bundle_row = get_demo_project_bundle(conn, clean_code)
+    bundle = _as_dict((bundle_row or {}).get("bundle_jsonb"))
+    return _extract_units_total_from_payload(bundle)
+
+
+def get_unit_status_breakdown(conn: Any, project_code: str) -> dict[str, int]:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return {}
+
+    project_profile = get_project_profile(conn, clean_code)
+    raw_breakdown = _as_json_object((project_profile or {}).get("raw_status_breakdown_jsonb"))
+    if raw_breakdown:
+        normalized: dict[str, int] = {}
+        for key, value in raw_breakdown.items():
+            normalized_key = _normalize_inventory_status(key)
+            normalized[normalized_key] = normalized.get(normalized_key, 0) + (_coerce_int(value) or 0)
+        if normalized:
+            return normalized
+
+    demo_rows = list_demo_units(conn, clean_code, rooms=None, currency=None)
+    if demo_rows:
+        grouped: dict[str, int] = {}
+        for row in demo_rows:
+            key = _normalize_inventory_status(row.get("availability_status"))
+            grouped[key] = grouped.get(key, 0) + 1
+        return grouped
+
+    availability_rows = get_availability_by_rooms(conn, clean_code, rooms=None)
+    grouped: dict[str, int] = {}
+    for row in availability_rows:
+        key = _normalize_inventory_status(row.get("status"))
+        count = _coerce_int(row.get("units_count")) or 0
+        grouped[key] = grouped.get(key, 0) + count
+    return grouped
+
+
+def get_available_units_count(conn: Any, project_code: str) -> int | None:
+    clean_code = str(project_code or "").strip()
+    if not clean_code:
+        return None
+
+    project_profile = get_project_profile(conn, clean_code)
+    profile_available = _coerce_int((project_profile or {}).get("available_units"))
+    if profile_available is not None:
+        return profile_available
+
+    demo_rows = list_demo_units(conn, clean_code, rooms=None, currency=None)
+    if demo_rows:
+        return sum(1 for row in demo_rows if _normalize_inventory_status(row.get("availability_status")) == "available")
+
+    breakdown = get_unit_status_breakdown(conn, clean_code)
+    if breakdown:
+        return int(breakdown.get("available") or 0)
+    return None
+
+
+def is_full_inventory_known(conn: Any, project_code: str) -> bool:
+    project_profile = get_project_profile(conn, project_code)
+    if project_profile:
+        return bool(project_profile.get("inventory_is_complete"))
+    total_units = get_total_units_for_project(conn, project_code)
+    if total_units is None:
+        return False
+    breakdown = get_unit_status_breakdown(conn, project_code)
+    if not breakdown:
+        return False
+    return sum(int(value or 0) for value in breakdown.values()) == total_units
+
+
+def find_demo_unit_by_code(conn: Any, unit_code: str) -> dict[str, Any] | None:
+    clean_code = str(unit_code or "").strip()
+    if not clean_code:
+        return None
+    target = clean_code.upper()
+    for row in list_all_demo_units(conn):
+        if str(row.get("unit_code") or "").strip().upper() == target:
+            return row
+    return None
 
 
 def _has_project_scope(schema_map: dict[str, list[str]], table_name: str) -> bool:
